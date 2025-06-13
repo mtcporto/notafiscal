@@ -5,9 +5,9 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="dark-mode">
   <div class="container">    <header class="header">
-      <button class="dark-mode-toggle" onclick="toggleDarkMode()"><i class="fas fa-moon"></i> Modo Escuro</button>
+      <button class="dark-mode-toggle" onclick="toggleDarkMode()"><i class="fas fa-sun"></i> Modo Claro</button>
       <h1>Emissão de NFS-e</h1>
       <p>Protótipo para João Pessoa - Padrão ABRASF</p>
     </header>
@@ -131,7 +131,7 @@
 
             <div class="form-group">
               <label for="descricao">Descrição do Serviço</label>
-              <textarea id="descricao" required rows="4" placeholder="Descreva detalhadamente o serviço prestado">Assessoria jurídica em processo previdenciário</textarea>
+              <textarea id="descricao" required rows="4" placeholder="Descreva detalhadamente o serviço prestado"></textarea>
               <div class="error-message" id="error-descricao"></div>
             </div>
 
@@ -391,11 +391,15 @@
         <h3><i class="fas fa-certificate"></i> Detalhes do Certificado Digital</h3>
         <span class="cert-detail-close" onclick="closeCertificateDetailModal()">&times;</span>
       </div>
-      <div class="cert-detail-body" id="certificateDetailBody">
-        <!-- Conteúdo será preenchido dinamicamente -->
+      <div class="cert-detail-body" id="certificateDetailBody">        <!-- Conteúdo será preenchido dinamicamente -->
       </div>
     </div>
-  </div>
+  </div>  <!-- Scripts separados por responsabilidade -->
+  <script src="configuracao.js"></script>
+  <script src="dados.js"></script>
+  <script src="xml.js"></script>
+  <script src="resumo.js"></script>
+  <script src="envio.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
