@@ -125,75 +125,8 @@
       // === VALIDAÇÃO XML MOVIDA PARA xml.js ===
     
     // === ENVIO PARA WEBSERVICE MOVIDO PARA envio.js ===// === VALIDAÇÃO ANTES DO ENVIO MOVIDA PARA xml.js ===
-    
-    // === INCREMENTO DE NÚMERO RPS MOVIDO PARA resumo.js ===// === STATUS DE ENVIO MOVIDO PARA resumo.js ===// Simular envio para webservice com integração real de certificado
-    async function simularEnvioWebservice(xml, config) {      // Passo 1: Validação (1 segundo) - primeiro deixa o loading, depois marca como concluído
-      await sleep(1000);
-      atualizarPassoEnvio(0, '<i class="fas fa-check-circle" style="color: #4caf50;"></i>', '#4caf50');
-      
-      // Passo 2: Assinatura Digital com certificado real (2 segundos)
-      await sleep(2000);
-      
-      try {
-        const resultadoAssinatura = await aplicarAssinaturaDigital(xml, config);
-        
-        if (!resultadoAssinatura.sucesso) {
-          atualizarPassoEnvio(1, '<i class="fas fa-times-circle" style="color: #e74c3c;"></i>', '#e74c3c');
-          throw new Error(`Erro na assinatura digital: ${resultadoAssinatura.erro}`);
-        }
-        
-        atualizarPassoEnvio(1, '<i class="fas fa-check-circle" style="color: #4caf50;"></i>', '#4caf50');
-        
-        // Passo 3: Envio (3 segundos)
-        await sleep(3000);
-        
-        // Simular possível erro de conectividade (5% de chance - reduzido)
-        if (Math.random() < 0.05) {
-          atualizarPassoEnvio(2, '<i class="fas fa-times-circle" style="color: #e74c3c;"></i>', '#e74c3c');
-          throw new Error('Erro de conectividade: Não foi possível conectar ao webservice da prefeitura');
-        }
-        
-        atualizarPassoEnvio(2, '<i class="fas fa-check-circle" style="color: #4caf50;"></i>', '#4caf50');
-        
-        // Passo 4: Recebimento do protocolo (1 segundo)
-        await sleep(1000);
-        
-        // Simular possível erro de validação do lado da prefeitura (3% de chance - reduzido)
-        if (Math.random() < 0.03) {
-          atualizarPassoEnvio(3, '<i class="fas fa-times-circle" style="color: #e74c3c;"></i>', '#e74c3c');
-          const erros = [
-            'CNPJ do prestador não habilitado para emissão de NFS-e',
-            'Valor do serviço incompatível com a alíquota informada',
-            'Código de serviço não encontrado na lista municipal',
-            'Inscrição Municipal inválida ou inexistente',
-            'Tomador com restrições no cadastro municipal'
-          ];
-          const erroAleatorio = erros[Math.floor(Math.random() * erros.length)];
-          throw new Error(`Erro de validação: ${erroAleatorio}`);
-        }
-        
-        atualizarPassoEnvio(3, '<i class="fas fa-check-circle" style="color: #4caf50;"></i>', '#4caf50');
-        
-        // Sucesso - gerar dados do protocolo
-        const protocolo = gerarNumeroProtocolo();
-        const numeroNfse = gerarNumeroNfse();
-        
-        return {
-          sucesso: true,
-          protocolo: protocolo,
-          numeroNfse: numeroNfse,
-          dataProcessamento: new Date().toISOString(),
-          linkConsulta: `https://nfse.joaopessoa.pb.gov.br/consulta/${protocolo}`,
-          linkDanfse: `https://nfse.joaopessoa.pb.gov.br/danfse/${numeroNfse}`,
-          codigoVerificacao: gerarCodigoVerificacao(),
-          certificadoUsado: resultadoAssinatura.certificadoInfo
-        };
-        
-      } catch (error) {
-        // Se chegou aqui, é erro de assinatura
-        throw error;
-      }
-    }
+      // === INCREMENTO DE NÚMERO RPS MOVIDO PARA resumo.js ===
+    // === STATUS DE ENVIO MOVIDO PARA resumo.js ===
       // === ENVIO PARA WEBSERVICE MOVIDO PARA envio.js ===
 
     // === SIMULAÇÃO DE ENVIO MOVIDA PARA envio.js ===

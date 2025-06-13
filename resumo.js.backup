@@ -50,8 +50,7 @@ function gerarResumo(dados) {
       <div class="resumo-item">
         <span class="resumo-label">Razão Social/Nome:</span>
         <span class="resumo-value">${dados.tomador.razaoSocial}</span>
-      </div>
-      <div class="resumo-item">
+      </div>      <div class="resumo-item">
         <span class="resumo-label">${dados.tomador.tipoDoc?.toUpperCase() || 'DOCUMENTO'}:</span>
         <span class="resumo-value">${formatarDocumento(dados.tomador.documento, dados.tomador.tipoDoc)}</span>
       </div>
@@ -64,8 +63,7 @@ function gerarResumo(dados) {
     </div>
     
     <div class="resumo-section">
-      <h4><i class="fas fa-cogs"></i> Serviço Prestado</h4>
-      <div class="resumo-item">
+      <h4><i class="fas fa-cogs"></i> Serviço Prestado</h4>      <div class="resumo-item">
         <span class="resumo-label">Código do Serviço:</span>
         <span class="resumo-value">${dados.servico.itemListaServico}</span>
       </div>
@@ -246,11 +244,9 @@ function exibirResultadoEnvio(resultado) {
           <small>${new Date(resultado.dataProcessamento).toLocaleString('pt-BR')}</small>
         </div>
       </div>
-
-      ${certificadoInfo}
+        ${certificadoInfo}
       
-      <div class="envio-step">
-        <span class="envio-icon"><i class="fas fa-link"></i></span>
+      <div class="envio-step">        <span class="envio-icon"><i class="fas fa-link"></i></span>
         <div class="envio-content">
           <strong>Link para Consulta</strong>
           <small>
@@ -285,7 +281,12 @@ function exibirResultadoEnvio(resultado) {
     </div>
   `;
   
-  document.getElementById('validationResults').innerHTML = resultadoHtml;
+  document.getElementById('resultadoEnvio').innerHTML = resultadoHtml;
+      ` : ''}
+    </div>
+  `;
+  
+  document.getElementById('resultadoEnvio').innerHTML = resultadoHtml;
   
   // Adicionar consulta de protocolo se não for envio via formulário
   if (!resultado.protocolo?.startsWith('FORM-SUBMIT')) {
@@ -313,60 +314,43 @@ function exibirResultadoEnvio(resultado) {
       }
     }, 500);
   }
+        <span class="envio-icon"><i class="fas fa-link"></i></span>
+        <div class="envio-content">
+          <strong>Link para Consulta</strong>
+          <small><a href="${resultado.linkConsulta}" target="_blank" style="color: #3498db;">${resultado.linkConsulta}</a></small>
+        </div>
+      </div>
+      
+      <div class="envio-step">
+        <span class="envio-icon"><i class="fas fa-file-alt"></i></span>
+        <div class="envio-content">
+          <strong>DANFSE</strong>
+          <small><a href="${resultado.linkDanfse}" target="_blank" style="color: #3498db;">Visualizar/Imprimir DANFSE</a></small>
+        </div>
+      </div>
+      
+      <div style="text-align: center; margin-top: 20px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+        <button type="button" onclick="gerarDANFSE('${resultado.numeroNfse}')" class="btn-primary">
+          <i class="fas fa-file-alt"></i> Baixar DANFSE
+        </button>
+        <button type="button" onclick="consultarStatus('${resultado.protocolo}')" class="btn-secondary">
+          <i class="fas fa-search"></i> Consultar Status
+        </button>
+        <button type="button" onclick="enviarPorEmail('${resultado.numeroNfse}')" class="btn-info">
+          <i class="fas fa-envelope"></i> Enviar por E-mail
+        </button>
+        <button type="button" onclick="gerarNovaRps()" class="btn-success">
+          <i class="fas fa-plus"></i> Nova RPS
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.getElementById('validationResults').innerHTML = resultadoHtml;
 }
 
 // Exibir erro no envio
 function exibirErroEnvio(error) {
-  // Identificar tipo de erro para dar soluções específicas
-  let tipoErro = 'generico';
-  let solucoes = [];
-  
-  if (error.message.includes('CORS') || error.message.includes('blocked by CORS')) {
-    tipoErro = 'cors';
-    solucoes = [
-      '🌐 Instale uma extensão anti-CORS no navegador',
-      '📁 Use o arquivo proxy-nfse.php incluído no projeto',
-      '🔧 Configure um servidor proxy local',
-      '🖥️ Execute o XAMPP e acesse via localhost'
-    ];
-  } else if (error.message.includes('cancelado pelo usuário')) {
-    tipoErro = 'cancelado';
-    solucoes = [
-      '🌐 Instale uma extensão anti-CORS para evitar popups',
-      '📁 Use o proxy-nfse.php para envio automático',
-      '🔧 Configure adequadamente o webservice',
-      '✅ Aceite o popup para envio direto quando solicitado'
-    ];
-  } else if (error.message.includes('xmlOutput') || error.message.includes('null')) {
-    tipoErro = 'xml';
-    solucoes = [
-      '📋 Preencha todos os dados nas abas anteriores',
-      '🔧 Clique em "Gerar XML" antes de enviar',
-      '🔄 Recarregue a página se o problema persistir',
-      '✅ Verifique se todos os campos obrigatórios estão preenchidos'
-    ];
-  } else if (error.message.includes('certificado') || error.message.includes('assinatura')) {
-    tipoErro = 'certificado';
-    solucoes = [
-      '📜 Configure um certificado digital válido',
-      '⏰ Verifique se o certificado não está vencido',
-      '🔧 Confirme o tipo de certificado (A1 ou A3)',
-      '💻 Para A3, certifique-se que o leitor está conectado'
-    ];
-  }
-  
-  const solucoesHtml = solucoes.length > 0 ? `
-    <div class="envio-step">
-      <span class="envio-icon">💡</span>
-      <div class="envio-content">
-        <strong>Possíveis Soluções</strong>
-        <small>
-          ${solucoes.map(sol => `• ${sol}`).join('<br>')}
-        </small>
-      </div>
-    </div>
-  ` : '';
-  
   const erroHtml = `
     <div class="envio-status">
       <h4>❌ Erro no Envio</h4>
@@ -379,25 +363,13 @@ function exibirErroEnvio(error) {
         </div>
       </div>
       
-      ${solucoesHtml}
-      
-      <div style="text-align: center; margin-top: 20px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+      <div style="text-align: center; margin-top: 20px;">
         <button type="button" onclick="enviarParaWebservice()" class="btn-primary">
           🔄 Tentar Novamente
         </button>
-        <button type="button" onclick="abrirModal()" class="btn-secondary">
-          ⚙️ Configurações
+        <button type="button" onclick="abrirModal()" class="btn-secondary" style="margin-left: 10px;">
+          ⚙️ Verificar Configurações
         </button>
-        ${tipoErro === 'xml' ? `
-          <button type="button" onclick="switchTab('servico')" class="btn-info">
-            📋 Preencher Dados
-          </button>
-        ` : ''}
-        ${tipoErro === 'cors' ? `
-          <button type="button" onclick="abrirDocumentacaoCors()" class="btn-info">
-            📖 Ver Soluções CORS
-          </button>
-        ` : ''}
       </div>
     </div>
   `;
@@ -574,7 +546,7 @@ function criarEnvelopeConsultaStatus(protocolo, config) {
 
 // Adicionar campo de consulta de protocolo no resumo de envio
 function adicionarConsultaProtocolo() {
-  const resultadoDiv = document.getElementById('validationResults');
+  const resultadoDiv = document.getElementById('resultadoEnvio');
   if (resultadoDiv && !document.getElementById('consultaProtocolo')) {
     const consultaHtml = `
       <div id="consultaProtocolo" class="config-section" style="margin-top: 20px; border: 2px solid #3498db;">
@@ -835,175 +807,8 @@ function exibirXmlCompleto(xmlBase64) {
   document.body.appendChild(modal);
 }
 
-// ==================== FUNÇÕES AUXILIARES ====================
-
-// Função para gerar nova RPS
-function gerarNovaRps() {
-  if (confirm('🔄 Deseja gerar uma nova RPS? Os dados atuais serão limpos.')) {
-    // Incrementar número RPS
-    incrementarNumeroRps();
-    
-    // Limpar formulário
-    document.getElementById('nfseForm').reset();
-    
-    // Limpar resultados
-    document.getElementById('validationResults').innerHTML = '';
-    document.getElementById('validationResults').style.display = 'none';
-    
-    // Voltar para o topo
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    
-    // Focar no primeiro campo
-    const primeiroInput = document.querySelector('#nfseForm input');
-    if (primeiroInput) {
-      primeiroInput.focus();
-    }
-    
-    console.log('✅ Nova RPS iniciada');
-  }
-}
-
-// Gerar número de protocolo único
-function gerarNumeroProtocolo() {
-  const timestamp = Date.now();
-  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-  return `${timestamp}${random}`;
-}
-
-// Gerar número da NFS-e
-function gerarNumeroNfse() {
-  const ano = new Date().getFullYear();
-  const timestamp = Date.now();
-  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-  return `${ano}${timestamp.toString().slice(-6)}${random}`;
-}
-
-// Gerar código de verificação
-function gerarCodigoVerificacao() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
-  for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
-
-// Incrementar número da RPS
-function incrementarNumeroRps() {
-  try {
-    const config = JSON.parse(localStorage.getItem('nfseConfig') || '{}');
-    if (!config.geral) config.geral = {};
-    
-    const numeroAtual = config.geral.proximoNumero || 1;
-    config.geral.proximoNumero = numeroAtual + 1;
-    
-    localStorage.setItem('nfseConfig', JSON.stringify(config));
-    console.log(`📊 Número RPS incrementado para: ${config.geral.proximoNumero}`);
-  } catch (error) {
-    console.error('❌ Erro ao incrementar número RPS:', error);
-  }
-}
-
-// Abrir documentação de soluções CORS
-function abrirDocumentacaoCors() {
-  const corsWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes');
-  corsWindow.document.write(`
-    <html>
-      <head>
-        <title>🌐 Soluções para Problemas de CORS</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; background: #f5f5f5; }
-          .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-          h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
-          h2 { color: #34495e; margin-top: 30px; }
-          .solucao { background: #e8f4fd; padding: 15px; margin: 15px 0; border-left: 4px solid #3498db; border-radius: 5px; }
-          .alerta { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 15px 0; border-radius: 5px; }
-          .sucesso { background: #d4edda; border-left: 4px solid #28a745; padding: 15px; margin: 15px 0; border-radius: 5px; }
-          code { background: #f8f9fa; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
-          .download-btn { background: #28a745; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-block; margin: 5px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>🌐 Soluções para Problemas de CORS</h1>
-          
-          <div class="alerta">
-            <strong>⚠️ O que é CORS?</strong><br>
-            CORS (Cross-Origin Resource Sharing) é uma política de segurança dos navegadores que bloqueia requisições entre diferentes domínios. Como o webservice da prefeitura está em outro domínio, ocorrem esses bloqueios.
-          </div>
-          
-          <h2>🎯 Soluções Recomendadas (em ordem de prioridade)</h2>
-          
-          <div class="solucao">
-            <h3>1. 🌐 Extensão Anti-CORS (Mais Fácil)</h3>
-            <p><strong>Chrome:</strong> CORS Unblock</p>
-            <p><strong>Firefox:</strong> CORS Everywhere</p>
-            <p><strong>Edge:</strong> CORS Toggle</p>
-            <p>✅ <strong>Vantagem:</strong> Funciona imediatamente, sem configuração</p>
-            <p>⚠️ <strong>Desvantagem:</strong> Reduz segurança do navegador</p>
-          </div>
-          
-          <div class="solucao">
-            <h3>2. 📁 Proxy PHP Local (Incluído no Projeto)</h3>
-            <p>Use o arquivo <code>proxy-nfse.php</code> que já está no seu projeto:</p>
-            <ol>
-              <li>Certifique-se que o XAMPP está rodando</li>
-              <li>Acesse o sistema via <code>http://localhost/mt/notafiscal/</code></li>
-              <li>O proxy será usado automaticamente</li>
-            </ol>
-            <p>✅ <strong>Vantagem:</strong> Seguro, automático</p>
-            <p>⚠️ <strong>Desvantagem:</strong> Requer servidor local</p>
-          </div>
-          
-          <div class="solucao">
-            <h3>3. 🖥️ Servidor Local Dedicado</h3>
-            <p>Configure um proxy reverso com nginx ou apache</p>
-            <p>✅ <strong>Vantagem:</strong> Produção-ready</p>
-            <p>⚠️ <strong>Desvantagem:</strong> Configuração mais complexa</p>
-          </div>
-          
-          <div class="solucao">
-            <h3>4. 📋 Envio Direto via Formulário (Último Recurso)</h3>
-            <p>Se todas as outras falharem, o sistema oferece envio direto que abre uma nova janela</p>
-            <p>✅ <strong>Vantagem:</strong> Sempre funciona</p>
-            <p>⚠️ <strong>Desvantagem:</strong> Resposta manual</p>
-          </div>
-          
-          <h2>🔧 Testando as Soluções</h2>
-          
-          <div class="sucesso">
-            <h3>Como saber se está funcionando:</h3>
-            <ul>
-              <li>✅ Envio automático sem popups</li>
-              <li>✅ Retorno automático do protocolo</li>
-              <li>✅ Sem mensagens de erro de CORS</li>
-              <li>✅ Console sem erros de bloqueio</li>
-            </ul>
-          </div>
-          
-          <h2>⚙️ Configuração do Proxy PHP</h2>
-          
-          <p>O arquivo <code>proxy-nfse.php</code> já está configurado. Para verificar:</p>
-          <ol>
-            <li>Abra o arquivo em um editor</li>
-            <li>Verifique se a URL do webservice está correta</li>
-            <li>Teste acessando: <code>http://localhost/mt/notafiscal/proxy-nfse.php</code></li>
-          </ol>
-          
-          <div class="alerta">
-            <strong>💡 Dica:</strong> Para desenvolvimento, use a extensão anti-CORS. Para produção, use o proxy PHP ou servidor dedicado.
-          </div>
-          
-          <div style="text-align: center; margin-top: 30px;">
-            <button onclick="window.close()" class="download-btn">✖️ Fechar</button>
-          </div>
-        </div>
-      </body>
-    </html>
-  `);
-}
-
-// ==================== AÇÕES PÓS-ENVIO ====================
+// ==================== EXPORTAR PARA ESCOPO GLOBAL ====================
+// Para manter compatibilidade com event listeners já definidos no HTML
 
 window.gerarResumo = gerarResumo;
 window.mostrarStatusEnvio = mostrarStatusEnvio;
@@ -1018,7 +823,5 @@ window.gerarNumeroProtocolo = gerarNumeroProtocolo;
 window.gerarNumeroNfse = gerarNumeroNfse;
 window.gerarCodigoVerificacao = gerarCodigoVerificacao;
 window.incrementarNumeroRps = incrementarNumeroRps;
-window.exibirXmlCompleto = exibirXmlCompleto;
-window.abrirDocumentacaoCors = abrirDocumentacaoCors;
 
 console.log('✅ RESUMO.JS carregado com sucesso!');

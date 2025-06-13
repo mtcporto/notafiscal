@@ -106,12 +106,12 @@ function preencherDadosMocados() {
   document.getElementById('tipoDocTomador').value = 'cnpj';
   document.getElementById('docTomador').value = '98.765.432/0001-10';
   document.getElementById('razaoTomador').value = 'Empresa Cliente Exemplo S.A.';
-  document.getElementById('emailTomador').value = 'contato@cliente.com.br';  // Dados do Serviço
-  document.getElementById('itemServico').value = '01.01';  // Análise, Desenvolvimento de Sistemas
+  document.getElementById('emailTomador').value = 'contato@cliente.com.br';  // Dados do Serviço  document.getElementById('itemServico').value = '01.01';  // Análise, Desenvolvimento de Sistemas
   document.getElementById('descricao').value = 'Desenvolvimento de sistema web personalizado para gestão empresarial, incluindo módulos de vendas, estoque e relatórios gerenciais.';
   document.getElementById('valor').value = '15000.00';  // Valor numérico sem formatação
   document.getElementById('aliquota').value = '0.05';   // Valor decimal para 5%
-  document.getElementById('issRetido').value = '2';
+  document.getElementById('issRetido').value = '2';  
+  
   // Atualizar placeholder do documento
   atualizarPlaceholderDocumento();
   
@@ -120,8 +120,6 @@ function preencherDadosMocados() {
   aplicarMascaraDocumento(document.getElementById('docTomador'));
   // Não aplicar máscara no campo valor pois é type="number"
   // Não aplicar máscara no campo aliquota pois é select
-
-  alert('✅ Dados de teste preenchidos com sucesso!');
 }
 
 // ==================== FORMATAÇÃO E MÁSCARAS ====================

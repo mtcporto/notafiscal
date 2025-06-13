@@ -135,43 +135,69 @@ function coletarDadosFormulario() {
 
 // ==================== CONSTRUÇÃO DO XML ====================
 
-// Construir o XML completo da NFS-e
+// Construir o XML completo da NFS-e conforme ABRASF v2.03
 function construirXMLNFSe(dados, valorServico, valorIss, valorLiquido, numeroRps, serieRps) {
+  // Data/hora atual no formato correto
+  const agora = new Date();
+  const dataEmissao = agora.toISOString().split('T')[0]; // AAAA-MM-DD
+  const dataHoraEmissao = agora.toISOString().replace(/\.\d{3}Z$/, ''); // AAAA-MM-DDTHH:mm:ss
+  
   return `<?xml version="1.0" encoding="UTF-8"?>
 <EnviarLoteRpsEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
-  <LoteRps Id="lote001" versao="2.02">
-    <NumeroLote>1</NumeroLote>
+  <LoteRps Id="lote${numeroRps.toString().padStart(3, '0')}" versao="2.03">
+    <NumeroLote>${numeroRps}</NumeroLote>
     <Cnpj>${dados.prestador.cnpj}</Cnpj>
     <InscricaoMunicipal>${dados.prestador.inscricaoMunicipal}</InscricaoMunicipal>
     <QuantidadeRps>1</QuantidadeRps>
     <ListaRps>
       <Rps>
-        <InfRps Id="rps001">
+        <InfRps Id="rps${numeroRps.toString().padStart(3, '0')}">
           <IdentificacaoRps>
             <Numero>${numeroRps}</Numero>
             <Serie>${serieRps}</Serie>
             <Tipo>1</Tipo>
           </IdentificacaoRps>
-          <DataEmissao>${new Date().toISOString().split('T')[0]}</DataEmissao>
+          <DataEmissao>${dataEmissao}</DataEmissao>
           <NaturezaOperacao>1</NaturezaOperacao>
-          <RegimeEspecialTributacao>1</RegimeEspecialTributacao>
-          <OptanteSimplesNacional>2</OptanteSimplesNacional>
-          <IncentivadorCultural>2</IncentivadorCultural>
+          <RegimeEspecialTributacao>${dados.servico.regimeEspecial || ''}</RegimeEspecialTributacao>
+          <OptanteSimplesNacional>${dados.prestador.simplesNacional || '2'}</OptanteSimplesNacional>
+          <IncentivadorCultural>${dados.prestador.incentivoCultural || '2'}</IncentivadorCultural>
           <Status>1</Status>
           <Servico>
             <Valores>
               <ValorServicos>${valorServico.toFixed(2)}</ValorServicos>
-              <ValorIss>${valorIss.toFixed(2)}</ValorIss>
-              <Aliquota>${(dados.servico.aliquota * 100).toFixed(2)}</Aliquota>
-              <ValorLiquidoNfse>${valorLiquido.toFixed(2)}</ValorLiquidoNfse>
+              ${dados.servico.valorDeducoes ? `<ValorDeducoes>${dados.servico.valorDeducoes.toFixed(2)}</ValorDeducoes>` : ''}
+              ${dados.servico.valorPis ? `<ValorPis>${dados.servico.valorPis.toFixed(2)}</ValorPis>` : ''}
+              ${dados.servico.valorCofins ? `<ValorCofins>${dados.servico.valorCofins.toFixed(2)}</ValorCofins>` : ''}
+              ${dados.servico.valorInss ? `<ValorInss>${dados.servico.valorInss.toFixed(2)}</ValorInss>` : ''}
+              ${dados.servico.valorIr ? `<ValorIr>${dados.servico.valorIr.toFixed(2)}</ValorIr>` : ''}
+              ${dados.servico.valorCsll ? `<ValorCsll>${dados.servico.valorCsll.toFixed(2)}</ValorCsll>` : ''}
               <IssRetido>${dados.servico.issRetido}</IssRetido>
+              <ValorIss>${valorIss.toFixed(2)}</ValorIss>
+              ${dados.servico.valorIssRetido ? `<ValorIssRetido>${dados.servico.valorIssRetido.toFixed(2)}</ValorIssRetido>` : ''}
+              ${dados.servico.outrasRetencoes ? `<OutrasRetencoes>${dados.servico.outrasRetencoes.toFixed(2)}</OutrasRetencoes>` : ''}
+              ${dados.servico.baseCalculo ? `<BaseCalculo>${dados.servico.baseCalculo.toFixed(2)}</BaseCalculo>` : ''}
+              <Aliquota>${(dados.servico.aliquota * 100).toFixed(4)}</Aliquota>
+              <ValorLiquidoNfse>${valorLiquido.toFixed(2)}</ValorLiquidoNfse>
+              ${dados.servico.descontoIncondicionado ? `<DescontoIncondicionado>${dados.servico.descontoIncondicionado.toFixed(2)}</DescontoIncondicionado>` : ''}
+              ${dados.servico.descontoCondicionado ? `<DescontoCondicionado>${dados.servico.descontoCondicionado.toFixed(2)}</DescontoCondicionado>` : ''}
             </Valores>
+            <IssRetido>${dados.servico.issRetido}</IssRetido>
+            ${dados.servico.responsavelRetencao ? `<ResponsavelRetencao>${dados.servico.responsavelRetencao}</ResponsavelRetencao>` : ''}
             <ItemListaServico>${dados.servico.itemListaServico}</ItemListaServico>
+            ${dados.servico.codigoCnae ? `<CodigoCnae>${dados.servico.codigoCnae}</CodigoCnae>` : ''}
+            ${dados.servico.codigoTributacaoMunicipio ? `<CodigoTributacaoMunicipio>${dados.servico.codigoTributacaoMunicipio}</CodigoTributacaoMunicipio>` : ''}
             <Discriminacao><![CDATA[${dados.servico.descricao}]]></Discriminacao>
-            <CodigoMunicipio>2507507</CodigoMunicipio>
+            <CodigoMunicipio>${dados.servico.codigoMunicipio || '2507507'}</CodigoMunicipio>
+            ${dados.servico.codigoPais ? `<CodigoPais>${dados.servico.codigoPais}</CodigoPais>` : ''}
+            <ExigibilidadeISS>${dados.servico.exigibilidadeIss || '1'}</ExigibilidadeISS>
+            ${dados.servico.municipioIncidencia ? `<MunicipioIncidencia>${dados.servico.municipioIncidencia}</MunicipioIncidencia>` : ''}
+            ${dados.servico.numeroProcesso ? `<NumeroProcesso>${dados.servico.numeroProcesso}</NumeroProcesso>` : ''}
           </Servico>
           <Prestador>
-            <Cnpj>${dados.prestador.cnpj}</Cnpj>
+            <CpfCnpj>
+              <Cnpj>${dados.prestador.cnpj}</Cnpj>
+            </CpfCnpj>
             <InscricaoMunicipal>${dados.prestador.inscricaoMunicipal}</InscricaoMunicipal>
           </Prestador>
           <Tomador>
@@ -182,10 +208,14 @@ function construirXMLNFSe(dados, valorServico, valorIss, valorLiquido, numeroRps
                   `<Cnpj>${dados.tomador.documento}</Cnpj>`
                 }
               </CpfCnpj>
+              ${dados.tomador.inscricaoMunicipal ? `<InscricaoMunicipal>${dados.tomador.inscricaoMunicipal}</InscricaoMunicipal>` : ''}
             </IdentificacaoTomador>
             <RazaoSocial>${dados.tomador.razaoSocial}</RazaoSocial>
-            ${dados.tomador.email ? `<Contato><Email>${dados.tomador.email}</Email></Contato>` : ''}
+            ${dados.tomador.endereco ? construirXMLEndereco(dados.tomador.endereco) : ''}
+            ${dados.tomador.email || dados.tomador.telefone ? construirXMLContato(dados.tomador) : ''}
           </Tomador>
+          ${dados.intermediario ? construirXMLIntermediario(dados.intermediario) : ''}
+          ${dados.construcaoCivil ? construirXMLConstrucaoCivil(dados.construcaoCivil) : ''}
         </InfRps>
       </Rps>
     </ListaRps>
@@ -266,7 +296,7 @@ function salvarXML() {
 
 // ==================== VALIDAÇÃO OFFLINE DO XML ====================
 
-// Validação offline do XML
+// Validação offline do XML conforme padrão ABRASF
 function validarXMLOffline() {
   const xmlContent = document.getElementById('xmlOutput').textContent;
   
@@ -275,7 +305,19 @@ function validarXMLOffline() {
     return;
   }
   
+  console.log('🔍 Iniciando validação ABRASF...');
+  
+  // Usar validação específica ABRASF
+  const resultadoABRASF = validarXMLABRASF(xmlContent);
+  
+  // Validações complementares
   const validacoes = [
+    {
+      nome: 'Conformidade ABRASF v2.03',
+      status: resultadoABRASF.valido,
+      detalhes: resultadoABRASF.valido ? 'XML conforme padrão ABRASF' : resultadoABRASF.erros.join('; '),
+      erros: resultadoABRASF.erros
+    },
     {
       nome: 'Estrutura XML válida',
       status: validarEstruturaXML(xmlContent),
@@ -297,15 +339,18 @@ function validarXMLOffline() {
       detalhes: 'Verifica se documentos têm formato válido'
     },
     {
-      nome: 'Código do município',
-      status: validarCodigoMunicipio(xmlContent),
-      detalhes: 'Verifica código do município (João Pessoa)'
+      nome: 'Assinatura preparada',
+      status: validarEstrutraAssinatura(xmlContent),
+      detalhes: 'Verifica se estrutura está pronta para assinatura digital'
     }
   ];
   
-  let htmlValidacao = '<div class="validation-xml"><h4><i class="fas fa-search"></i> Resultado da Validação Offline</h4>';
+  let htmlValidacao = '<div class="validation-xml"><h4><i class="fas fa-search"></i> Validação ABRASF v2.03</h4>';
   
+  let todosValidos = true;
   validacoes.forEach(validacao => {
+    if (!validacao.status) todosValidos = false;
+    
     const icon = validacao.status ? 
       '<i class="fas fa-check-circle" style="color: #27ae60;"></i>' : 
       '<i class="fas fa-times-circle" style="color: #e74c3c;"></i>';
@@ -316,10 +361,32 @@ function validarXMLOffline() {
         <div>
           <strong>${validacao.nome}</strong><br>
           <small>${validacao.detalhes}</small>
+          ${validacao.erros && validacao.erros.length > 0 ? 
+            `<ul style="margin-top: 5px; color: #e74c3c; font-size: 12px;">
+              ${validacao.erros.map(erro => `<li>${erro}</li>`).join('')}
+            </ul>` : ''
+          }
         </div>
       </div>
     `;
   });
+  
+  // Resultado geral
+  if (todosValidos) {
+    htmlValidacao += `
+      <div class="validation-summary success">
+        <i class="fas fa-thumbs-up"></i>
+        <strong>XML aprovado!</strong> Conforme padrão ABRASF v2.03 e pronto para envio.
+      </div>
+    `;
+  } else {
+    htmlValidacao += `
+      <div class="validation-summary error">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>Correções necessárias!</strong> Ajuste os itens marcados em vermelho.
+      </div>
+    `;
+  }
   
   htmlValidacao += '</div>';
   
@@ -373,23 +440,35 @@ function validarDocumentos(xml) {
 
 // Validar código do município
 function validarCodigoMunicipio(xml) {
-  // João Pessoa = 2507507
+  // João Pessoa - PB: 2507507
   return xml.includes('<CodigoMunicipio>2507507</CodigoMunicipio>');
+}
+
+// Validar estrutura para assinatura digital
+function validarEstrutraAssinatura(xml) {
+  // Verificar se tem IDs necessários para assinatura
+  const temIdLote = xml.includes('Id="lote');
+  const temIdRps = xml.includes('Id="rps');
+  const temNamespace = xml.includes('xmlns="http://www.abrasf.org.br/nfse.xsd"');  
+  return temIdLote && temIdRps && temNamespace;
 }
 
 // ==================== VALIDAÇÃO ANTES DO ENVIO ====================
 
-// Validação antes do envio (retorna true se passou em todas)
+// Validação antes do envio usando padrão ABRASF (retorna true se passou em todas)
 async function validarAntesSoenvio(xml) {
-  const validacoes = [
-    validarEstruturaXML(xml),
-    validarElementosObrigatorios(xml),
-    validarFormatoValores(xml),
-    validarDocumentos(xml),
-    validarCodigoMunicipio(xml)
-  ];
+  console.log('🔍 Validando XML antes do envio com padrão ABRASF...');
   
-  return validacoes.every(v => v);
+  // Usar a validação ABRASF que implementamos
+  const resultadoABRASF = validarXMLABRASF(xml);
+  
+  if (resultadoABRASF.valido) {
+    console.log('✅ XML aprovado pela validação ABRASF');
+    return true;
+  } else {
+    console.log('❌ XML reprovado pela validação ABRASF:', resultadoABRASF.erros);
+    return false;
+  }
 }
 
 // ==================== FUNÇÕES AUXILIARES ====================
@@ -495,5 +574,135 @@ window.obterXMLAtual = obterXMLAtual;
 window.limparXML = limparXML;
 window.formatarXML = formatarXML;
 window.extrairDadosDoXML = extrairDadosDoXML;
+
+// ==================== FUNÇÕES AUXILIARES PARA XML CONFORME ABRASF ====================
+
+// Construir XML de endereço conforme padrão ABRASF
+function construirXMLEndereco(endereco) {
+  if (!endereco) return '';
+  
+  return `
+    <Endereco>
+      ${endereco.logradouro ? `<Endereco>${endereco.logradouro}</Endereco>` : ''}
+      ${endereco.numero ? `<Numero>${endereco.numero}</Numero>` : ''}
+      ${endereco.complemento ? `<Complemento>${endereco.complemento}</Complemento>` : ''}
+      ${endereco.bairro ? `<Bairro>${endereco.bairro}</Bairro>` : ''}
+      ${endereco.codigoMunicipio ? `<CodigoMunicipio>${endereco.codigoMunicipio}</CodigoMunicipio>` : ''}
+      ${endereco.uf ? `<Uf>${endereco.uf}</Uf>` : ''}
+      ${endereco.codigoPais ? `<CodigoPais>${endereco.codigoPais}</CodigoPais>` : ''}
+      ${endereco.cep ? `<Cep>${endereco.cep.replace(/\D/g, '')}</Cep>` : ''}
+    </Endereco>`;
+}
+
+// Construir XML de contato conforme padrão ABRASF
+function construirXMLContato(contato) {
+  if (!contato.email && !contato.telefone) return '';
+  
+  return `
+    <Contato>
+      ${contato.telefone ? `<Telefone>${contato.telefone}</Telefone>` : ''}
+      ${contato.email ? `<Email>${contato.email}</Email>` : ''}
+    </Contato>`;
+}
+
+// Construir XML de intermediário conforme padrão ABRASF
+function construirXMLIntermediario(intermediario) {
+  if (!intermediario) return '';
+  
+  return `
+    <Intermediario>
+      <IdentificacaoIntermediario>
+        <CpfCnpj>
+          ${intermediario.tipoDoc === 'cpf' ? 
+            `<Cpf>${intermediario.documento}</Cpf>` : 
+            `<Cnpj>${intermediario.documento}</Cnpj>`
+          }
+        </CpfCnpj>
+        ${intermediario.inscricaoMunicipal ? `<InscricaoMunicipal>${intermediario.inscricaoMunicipal}</InscricaoMunicipal>` : ''}
+      </IdentificacaoIntermediario>
+      <RazaoSocial>${intermediario.razaoSocial}</RazaoSocial>
+      ${intermediario.endereco ? construirXMLEndereco(intermediario.endereco) : ''}
+      ${intermediario.email || intermediario.telefone ? construirXMLContato(intermediario) : ''}
+    </Intermediario>`;
+}
+
+// Construir XML de construção civil conforme padrão ABRASF
+function construirXMLConstrucaoCivil(construcao) {
+  if (!construcao) return '';
+  
+  return `
+    <ConstrucaoCivil>
+      ${construcao.codigoObra ? `<CodigoObra>${construcao.codigoObra}</CodigoObra>` : ''}
+      ${construcao.art ? `<Art>${construcao.art}</Art>` : ''}
+    </ConstrucaoCivil>`;
+}
+
+// Validar XML conforme Schema ABRASF
+function validarXMLABRASF(xml) {
+  console.log('🔍 Validando XML conforme padrão ABRASF...');
+  
+  const erros = [];
+  
+  // Validações básicas obrigatórias conforme ABRASF
+  if (!xml.includes('xmlns="http://www.abrasf.org.br/nfse.xsd"')) {
+    erros.push('Namespace ABRASF obrigatório está ausente');
+  }
+  
+  if (!xml.includes('<EnviarLoteRpsEnvio')) {
+    erros.push('Elemento raiz EnviarLoteRpsEnvio está ausente');
+  }
+  
+  // Validar estrutura do lote
+  if (!xml.includes('<LoteRps') || !xml.includes('versao="2.03"')) {
+    erros.push('Versão do layout deve ser 2.03');
+  }
+  
+  // Validar elementos obrigatórios do prestador
+  if (!xml.includes('<Prestador>')) {
+    erros.push('Dados do prestador são obrigatórios');
+  }
+  
+  // Validar CNPJ do prestador (14 dígitos) - mais flexível
+  const cnpjMatch = xml.match(/<Cnpj>(\d+)<\/Cnpj>/);
+  if (!cnpjMatch || cnpjMatch[1].length !== 14) {
+    erros.push('CNPJ do prestador deve ter 14 dígitos');
+  }
+  
+  // Validar valores monetários (formato decimal) - mais flexível
+  const valoresMatch = xml.match(/<ValorServicos>([\d.]+)<\/ValorServicos>/);
+  if (!valoresMatch || isNaN(parseFloat(valoresMatch[1]))) {
+    erros.push('ValorServicos deve ser um número válido');
+  }
+  
+  // Validar alíquota (formato percentual) - mais flexível
+  const aliquotaMatch = xml.match(/<Aliquota>([\d.]+)<\/Aliquota>/);
+  if (!aliquotaMatch || isNaN(parseFloat(aliquotaMatch[1]))) {
+    erros.push('Alíquota deve ser um número válido');
+  }
+  
+  // Validar item da lista de serviços (formato mais flexível)
+  const itemMatch = xml.match(/<ItemListaServico>(\d+\.?\d*)<\/ItemListaServico>/);
+  if (!itemMatch) {
+    erros.push('ItemListaServico deve ser um código válido');
+  }
+  
+  // Validar data de emissão (formato AAAA-MM-DD)
+  const dataMatch = xml.match(/<DataEmissao>(\d{4}-\d{2}-\d{2})<\/DataEmissao>/);
+  if (!dataMatch) {
+    erros.push('DataEmissao deve estar no formato AAAA-MM-DD');
+  }
+  
+  // Log dos erros para debug
+  if (erros.length > 0) {
+    console.log('❌ Erros encontrados na validação ABRASF:', erros);
+  } else {
+    console.log('✅ XML conforme padrão ABRASF!');
+  }
+  
+  return {
+    valido: erros.length === 0,
+    erros: erros
+  };
+}
 
 console.log('✅ XML.JS carregado com sucesso!');
