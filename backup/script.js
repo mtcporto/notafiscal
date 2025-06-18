@@ -190,46 +190,11 @@
         console.log('Botão Dados de Teste clicado'); // Debug
         preencherDadosMocados();
       });
-        // Botão Dados Pixel Vivo
+      
+      // Botão Dados Pixel Vivo
       document.getElementById('btnDadosPixelVivo').addEventListener('click', function() {
         console.log('Botão Dados Pixel Vivo clicado'); // Debug
         preencherDadosPixelVivo();
-      });
-
-      // Botão Assinatura Simples
-      document.getElementById('btnAssinaturaSimples').addEventListener('click', async function() {
-        console.log('🎯 Botão ASSINATURA SIMPLES clicado');
-        
-        try {
-          document.getElementById('validationResults').innerHTML = 
-            '<div class="validation-info">🎯 Iniciando assinatura REAL com upload...</div>';
-          document.getElementById('validationResults').style.display = 'block';
-          
-          // Executar teste da assinatura simplificada
-          const resultado = await testarAssinaturaSimplificada();
-          
-          if (resultado.sucesso) {
-            document.getElementById('validationResults').innerHTML = 
-              `<div class="validation-success">
-                🎯 ASSINATURA REAL EXECUTADA!<br>
-                ✅ Node-forge processou o .pfx<br>
-                📁 Upload manual funcionou<br>
-                📏 XML: ${resultado.xmlAssinado.length} chars<br>
-                🔐 Certificado real validado<br>
-                🎉 Sistema funcional e pronto!
-              </div>`;
-              
-            console.log('🎯 XML com assinatura REAL:', resultado.xmlAssinado.substring(0, 500) + '...');
-          } else {
-            document.getElementById('validationResults').innerHTML = 
-              `<div class="validation-error">❌ Erro na assinatura: ${resultado.erro}</div>`;
-          }
-          
-        } catch (error) {
-          console.error('❌ Erro na assinatura simples:', error);
-          document.getElementById('validationResults').innerHTML = 
-            `<div class="validation-error">❌ Erro: ${error.message}</div>`;
-        }
       });// Botão Salvar XML (agora usa função do xml.js)
       document.getElementById('btnSalvar').addEventListener('click', salvarXML);        // Botão Validar XML (agora usa função do xml.js)
       document.getElementById('btnValidarXML').addEventListener('click', validarXMLOffline);
@@ -341,7 +306,8 @@
           
           const postData = await postResponse.json();
           console.log('✅ Worker POST test:', postData);
-            document.getElementById('validationResults').innerHTML = 
+          
+          document.getElementById('validationResults').innerHTML = 
             `<div class="validation-success">
               ✅ Worker Cloudflare funcionando!<br>
               📡 URL: ${workerUrl}<br>
@@ -356,4 +322,5 @@
               ❌ Erro no Worker: ${error.message}<br>
               Verifique se o Worker está ativo em workers.cloudflare.com
             </div>`;
-        }      });      
+        }
+      });

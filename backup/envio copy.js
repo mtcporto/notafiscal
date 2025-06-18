@@ -91,7 +91,6 @@ async function enviarParaWebservice() {
 // Enviar para webservice real da prefeitura
 async function enviarParaWebserviceReal(xml, config) {
   console.log('🌐 Iniciando envio real para webservice da prefeitura...');
-  console.log('📄 XML recebido para envio:', xml.substring(0, 200) + '...');
   
   // Passo 1: Validação local do XML
   await sleep(500);
@@ -198,27 +197,25 @@ Detalhes técnicos: ${error.message}`);
   }
 }
 
-// Tentar envio com estratégia otimizada (apenas Cloudflare Worker + Formulário backup)
+// Tentar envio com múltiplas estratégias de fallback
 async function tentarEnvioComFallback(urlWebservice, soapEnvelope) {
   const estrategias = [
-    { nome: 'Cloudflare Worker', funcao: () => tentarEnvioProxiesAlternativos(urlWebservice, soapEnvelope) },
-    { nome: 'Formulário', funcao: () => tentarEnvioFormulario(urlWebservice, soapEnvelope) }
+    () => tentarEnvioFetch(urlWebservice, soapEnvelope),
+    () => tentarEnvioXMLHttpRequest(urlWebservice, soapEnvelope),
+    () => tentarEnvioProxy(urlWebservice, soapEnvelope),
+    () => tentarEnvioFormulario(urlWebservice, soapEnvelope)
   ];
   
   let ultimoErro = null;
   
   for (let i = 0; i < estrategias.length; i++) {
     try {
-      console.log(`🔄 Tentando estratégia ${i + 1}/${estrategias.length}: ${estrategias[i].nome}...`);
-      const respostaXML = await estrategias[i].funcao();
-      console.log(`✅ Estratégia ${i + 1} (${estrategias[i].nome}) funcionou!`);
-      
-      // Processar a resposta SOAP para extrair dados estruturados
-      const resultado = processarRespostaSOAP(respostaXML);
+      console.log(`🔄 Tentando estratégia ${i + 1}/${estrategias.length}...`);
+      const resultado = await estrategias[i]();
+      console.log(`✅ Estratégia ${i + 1} funcionou!`);
       return resultado;
-      
     } catch (error) {
-      console.warn(`❌ Estratégia ${i + 1} (${estrategias[i].nome}) falhou:`, error.message);
+      console.warn(`❌ Estratégia ${i + 1} falhou:`, error.message);
       ultimoErro = error;
       
       // Se for o último método, não continuar
@@ -227,7 +224,7 @@ async function tentarEnvioComFallback(urlWebservice, soapEnvelope) {
       }
       
       // Pequena pausa entre tentativas
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
   
@@ -300,10 +297,14 @@ async function tentarEnvioXMLHttpRequest(urlWebservice, soapEnvelope) {
 }
 
 // Estratégia 3: Proxy local (se disponível)
-async function tentarEnvioProxy(urlWebservice, soapEnvelope) {  // Verificar se há um proxy local disponível (reduzido para evitar múltiplas tentativas)
+async function tentarEnvioProxy(urlWebservice, soapEnvelope) {
+  // Verificar se há um proxy local disponível
   const proxyUrls = [
     './proxy-nfse.php',
-    '/mt/notafiscal/proxy-nfse.php'
+    'proxy-nfse.php',
+    '/mt/notafiscal/proxy-nfse.php',
+    '/proxy-nfse.php',
+    'http://localhost/mt/notafiscal/proxy-nfse.php'
   ];
     for (const proxyUrl of proxyUrls) {
     try {
@@ -337,16 +338,9 @@ async function tentarEnvioProxy(urlWebservice, soapEnvelope) {  // Verificar se 
         if (response.ok) {
         const data = await response.json();
         console.log('📡 Resposta do proxy:', data);
-          if (data.success) {
-          console.log('📡 Proxy retornou sucesso, verificando conteúdo...');
-          
-          // Verificar se a resposta não está vazia
-          if (!data.response || data.response.trim() === '') {
-            console.warn('⚠️ Proxy retornou sucesso mas resposta vazia - continuando para próximo proxy');
-            throw new Error('Resposta vazia do proxy PHP - tentando proxies alternativos');
-          }
-          
-          console.log('✅ Proxy retornou resposta válida, processando SOAP...');
+        
+        if (data.success) {
+          console.log('✅ Proxy retornou sucesso, processando resposta SOAP...');
           return processarRespostaSOAP(data.response);
         } else {
           console.error('❌ Proxy retornou erro:', data.error);
@@ -365,45 +359,7 @@ async function tentarEnvioProxy(urlWebservice, soapEnvelope) {  // Verificar se 
   throw new Error('Nenhum proxy local disponível');
 }
 
-// Estratégia 4: Proxies alternativos (Node.js, Cloudflare, etc.)
-async function tentarEnvioProxiesAlternativos(urlWebservice, soapEnvelope) {
-  console.log('🔄 Testando proxies alternativos...');
-  
-  // Filtrar apenas proxies ativos
-  const proxiesAtivos = PROXIES_ALTERNATIVOS.filter(p => p.ativo);
-  
-  if (proxiesAtivos.length === 0) {
-    console.log('⚠️ Nenhum proxy alternativo ativo configurado');
-    throw new Error('Nenhum proxy alternativo disponível');
-  }
-  
-  for (const proxy of proxiesAtivos) {
-    try {
-      console.log(`🔄 Testando proxy alternativo: ${proxy.nome}`);
-      
-      // Primeiro testar se o proxy está acessível
-      const disponivel = await testarProxyAlternativo(proxy);
-      if (!disponivel) {
-        console.log(`❌ Proxy ${proxy.nome} não está disponível`);
-        continue;
-      }
-      
-      // Tentar enviar via proxy
-      const resposta = await enviarViaProxyAlternativo(proxy, urlWebservice, soapEnvelope);
-      
-      console.log(`✅ Proxy alternativo ${proxy.nome} funcionou!`);
-      return resposta;
-      
-    } catch (error) {
-      console.warn(`❌ Proxy ${proxy.nome} falhou:`, error.message);
-      continue;
-    }
-  }
-  
-  throw new Error('Todos os proxies alternativos falharam');
-}
-
-// Estratégia 5: Formulário (para casos específicos)
+// Estratégia 4: Formulário (para casos específicos)
 async function tentarEnvioFormulario(urlWebservice, soapEnvelope) {
   // Esta é uma estratégia de último recurso com método corrigido para SOAP
   console.log('📝 Tentativa via formulário - enviando XML como texto puro');
@@ -562,7 +518,8 @@ Deseja continuar com o envio corrigido?`);    if (confirmacao) {
         return { protocolo: null, numero: null };
       }
     }
-      async function enviarSOAP() {
+    
+    async function enviarSOAP() {
       try {
         console.log('🚀 Iniciando envio SOAP corrigido...');
         console.log('🎯 URL:', urlWebservice);
@@ -572,82 +529,22 @@ Deseja continuar com o envio corrigido?`);    if (confirmacao) {
         
         document.getElementById('status').innerHTML = '📡 Enviando XML SOAP puro (sem encoding)...';
         
-        let response, responseText;
+        const response = await fetch(urlWebservice, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/xml; charset=utf-8',
+            'SOAPAction': '',
+            'Accept': 'text/xml, application/soap+xml, application/xml'
+          },
+          body: soapEnvelope
+        });
         
-        try {
-          // Tentar envio direto primeiro
-          response = await fetch(urlWebservice, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'text/xml; charset=utf-8',
-              'SOAPAction': '',
-              'Accept': 'text/xml, application/soap+xml, application/xml'
-            },
-            body: soapEnvelope
-          });
-          
-          responseText = await response.text();
-          console.log('✅ Envio direto funcionou!');
-          
-        } catch (corsError) {
-          console.log('⚠️ Envio direto falhou (CORS), tentando via proxy...');
-          document.getElementById('status').innerHTML = '🔄 CORS detectado, usando proxy local...';
-          
-          // Tentar via proxy local
-          response = await fetch('/mt/notafiscal/proxy-nfse.php', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              url: urlWebservice,
-              soapEnvelope: soapEnvelope,
-              headers: {
-                'Content-Type': 'text/xml; charset=utf-8',
-                'SOAPAction': ''
-              }
-            })
-          });
-            const proxyResponse = await response.json();
-          
-          if (!proxyResponse.success) {
-            throw new Error('Proxy: ' + proxyResponse.error);
-          }
-          
-          responseText = proxyResponse.response;
-          
-          // Log especial para João Pessoa que retorna HTTP 404 mas com resposta válida
-          if (proxyResponse.httpCode === 404 && responseText && responseText.trim() !== '') {
-            console.log('⚠️ Proxy recebeu HTTP 404 mas com resposta SOAP');
-            console.log('📊 HTTP Code do webservice:', proxyResponse.httpCode);
-            console.log('📄 Resposta recebida:', responseText.substring(0, 200) + '...');
-            
-            // Para João Pessoa, HTTP 404 é comum mas ainda pode haver resposta válida
-            if (urlWebservice.includes('joaopessoa.pb.gov.br')) {
-              console.log('🏛️ João Pessoa detectado - processando resposta mesmo com HTTP 404');
-            }
-          } else {
-            console.log('✅ Envio via proxy funcionou!');
-          }
-        }        }
-        
-        console.log('� Resposta recebida');
+        console.log('📥 Resposta recebida');
         console.log('📊 Status:', response.status, response.statusText);
-        console.log('�📄 Conteúdo completo:', responseText);
+        console.log('📋 Headers:', [...response.headers.entries()]);
         
-        // Verificar se é erro de assinatura conhecido
-        if (responseText.includes('Arquivo enviado com erro na assinatura') || 
-            responseText.includes('Acerte a assinatura do arquivo')) {
-          document.getElementById('status').innerHTML = '🔐 Erro de Assinatura Digital Detectado';
-          document.getElementById('status').className = 'status erro';
-          document.getElementById('resultado').style.display = 'block';
-          document.getElementById('resultado').textContent = 
-            '🔐 WEBSERVICE FUNCIONANDO! ✅\\n\\n' +
-            'Erro: Assinatura digital inválida ou ausente\\n\\n' +
-            'Resposta do servidor:\\n' + responseText + '\\n\\n' +
-            '💡 Solução: Configure um certificado digital válido (A1 ou A3)';
-          return;
-        }
+        const responseText = await response.text();
+        console.log('📄 Conteúdo completo:', responseText);
         
         // Remover loading
         document.getElementById('loading').style.display = 'none';
@@ -657,32 +554,16 @@ Deseja continuar com o envio corrigido?`);    if (confirmacao) {
         // Tentar extrair protocolo/número
         const dados = extrairProtocolo(responseText);
         
-        // Verificar se temos uma resposta do proxy com informações especiais
-        let statusCode = null;
-        let isProxyResponse = false;
-        if (typeof proxyResponse !== 'undefined' && proxyResponse.httpCode) {
-          statusCode = proxyResponse.httpCode;
-          isProxyResponse = true;
-        } else if (response.status) {
-          statusCode = response.status;
-        }
-        
-        // Log especial para respostas HTTP 404 com conteúdo
-        if (statusCode === 404 && responseText && responseText.trim() !== '') {
-          console.log('📡 HTTP 404 detectado mas com resposta de conteúdo');
-          console.log('🔍 Analisando se é SOAP Fault ou erro específico...');
-          console.log('📄 Resposta (primeiros 300 chars):', responseText.substring(0, 300));
-        }
-        
-        if (response.ok || response.status === 500 || statusCode === 404) { // Incluir 404 como válido se houver conteúdo
+        if (response.ok || response.status === 500) { // 500 pode ser SOAP Fault válido
           if (dados.protocolo || dados.numero) {
             document.getElementById('status').innerHTML = '✅ NFS-e processada com sucesso!';
             document.getElementById('status').className = 'status sucesso';
-              document.getElementById('protocolo-info').innerHTML = \`
+            
+            document.getElementById('protocolo-info').innerHTML = \`
               <div class="protocolo">
                 <h3>🎉 Dados da NFS-e:</h3>
                 \${dados.protocolo ? '<p><strong>📋 Protocolo:</strong> ' + dados.protocolo + '</p>' : ''}
-                \${dados.numero ? '<p><strong>🔢 Número NFS-e:</strong> ' + dados.numero + '</p>' : ''}
+                \${dados.numero ? '<p><strong>� Número NFS-e:</strong> ' + dados.numero + '</p>' : ''}
                 <p><strong>⏰ Processado em:</strong> \${new Date().toLocaleString()}</p>
               </div>
             \`;
@@ -691,40 +572,12 @@ Deseja continuar com o envio corrigido?`);    if (confirmacao) {
           } else if (responseText.includes('soap:Fault') || responseText.includes('Fault')) {
             document.getElementById('status').innerHTML = '⚠️ SOAP Fault recebido - verifique os dados';
             document.getElementById('status').className = 'status erro';
-            
-            // Se foi HTTP 404 via proxy, adicionar contexto
-            if (statusCode === 404 && isProxyResponse) {
-              document.getElementById('status').innerHTML += ' (HTTP 404 + SOAP Fault)';
-            }
-            
-          } else if (statusCode === 404 && responseText && responseText.trim() !== '') {
-            // HTTP 404 mas com conteúdo - comum em alguns webservices
-            document.getElementById('status').innerHTML = '📡 Webservice respondeu (HTTP 404 com conteúdo)';
-            document.getElementById('status').className = 'status aguardando';
-            
-            // Adicionar informação especial sobre HTTP 404
-            const infoExtra = document.createElement('div');
-            infoExtra.className = 'info-extra';
-            infoExtra.style.cssText = 'background: #e7f3ff; border: 1px solid #0066cc; padding: 10px; margin: 10px 0; border-radius: 5px;';            infoExtra.innerHTML = \`
-              <p><strong>ℹ️ Informação Técnica:</strong></p>
-              <p>• O webservice retornou HTTP 404 mas forneceu uma resposta</p>
-              <p>• Isso é comum em webservices que exigem certificado digital válido no servidor</p>
-              <p>• A resposta pode conter informações sobre o erro específico</p>
-              <p><strong>👀 Analise a resposta abaixo para identificar a causa exata</strong></p>
-            \`;
-            
-            const resultado = document.getElementById('resultado');
-            resultado.insertBefore(infoExtra, resultado.firstChild);
-            
           } else {
             document.getElementById('status').innerHTML = '✅ Resposta recebida - analise o conteúdo';
             document.getElementById('status').className = 'status sucesso';
           }
         } else {
-          document.getElementById('status').innerHTML = '⚠️ Código HTTP: ' + (statusCode || response.status);
-          if (response.statusText) {
-            document.getElementById('status').innerHTML += ' - ' + response.statusText;
-          }
+          document.getElementById('status').innerHTML = '⚠️ Código HTTP: ' + response.status + ' - ' + response.statusText;
           document.getElementById('status').className = 'status erro';
         }
         
@@ -784,25 +637,19 @@ Não foi possível abrir nova janela para envio corrigido.`);
 
 // Obter URL padrão do webservice baseado no município
 function obterUrlWebservicePadrao() {
-  // João Pessoa - PB - URL confirmada como funcional (TESTADO em 16/06/2025)
-  // WSDL acessível: https://serem-hml.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap?wsdl
-  // Endpoint POST: https://serem-hml.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap
-  // Status: ATIVO - responde "Arquivo enviado com erro na assinatura" quando não assinado
+  // João Pessoa - PB - URL correta baseada no WSDL
   return 'https://serem-hml.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap';
 }
 
-// Criar envelope SOAP para envio conforme WSDL de João Pessoa
+// Criar envelope SOAP para envio (apenas com certificado digital - padrão ABRASF)
 function criarEnvelopeSOAP(xmlContent, versao = '2.03') {
-  // Envelope SOAP conforme WSDL - document/literal com namespace correto
-  // SOAPAction vazia conforme binding SOAP
-  // CORRIGIDO: remover declaração XML duplicada do conteúdo
-  const xmlSemDeclaracao = xmlContent.replace(/^<\?xml[^>]*\?>\s*/, '');
+  // Envelope SOAP mais simples baseado no WSDL
   return `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="http://nfse.abrasf.org.br">
   <soap:Body>
-    <RecepcionarLoteRps xmlns="http://nfse.abrasf.org.br">
-      ${xmlSemDeclaracao}
-    </RecepcionarLoteRps>
+    <tns:RecepcionarLoteRps>
+      ${xmlContent}
+    </tns:RecepcionarLoteRps>
   </soap:Body>
 </soap:Envelope>`;
 }
@@ -814,59 +661,15 @@ function processarRespostaSOAP(responseText) {
     
     // Debug detalhado da resposta
     logRespostaParaDebug(responseText);
-
-    // Verificar se é erro específico de assinatura (João Pessoa)
-    if (responseText.includes('Arquivo enviado com erro na assinatura') || 
-        responseText.includes('Acerte a assinatura do arquivo')) {
-      throw new Error(`🔐 ERRO DE ASSINATURA DIGITAL
-
-O webservice está funcionando, mas rejeitou o XML porque:
-• A assinatura digital não foi aplicada corretamente
-• O certificado pode estar expirado ou inválido  
-• O XML pode estar malformado para assinatura
-
-✅ Webservice confirmado como ATIVO
-⚠️ Necessário certificado digital válido (A1 ou A3)
-
-Resposta do servidor: ${responseText.substring(0, 200)}...`);
-    }
-
+    
     // Verificar se a resposta está vazia
     if (!responseText || responseText.trim() === '') {
       throw new Error('Resposta vazia do webservice');
     }
-      // Verificar se é uma resposta de erro HTML
+    
+    // Verificar se é uma resposta de erro HTML
     if (responseText.includes('<html') || responseText.includes('<!DOCTYPE')) {
       throw new Error('Webservice retornou página HTML ao invés de XML SOAP');
-    }
-    
-    // Verificar se é erro 523 (origem inacessível) do Cloudflare
-    if (responseText.includes('error code: 523')) {
-      throw new Error(`🔧 WEBSERVICE TEMPORARIAMENTE INDISPONÍVEL
-
-O webservice de João Pessoa está temporariamente inacessível (erro 523).
-
-✅ Progresso confirmado:
-• Cloudflare Worker funcionando
-• Envelope SOAP aceito (não mais erro SAAJ)
-• Comunicação estabelecida com o endpoint
-
-❓ Possíveis causas:
-• Servidor do webservice em manutenção
-• Sobrecarga temporária do servidor
-• Configuração de firewall/proxy
-
-💡 Soluções:
-• Aguardar alguns minutos e tentar novamente
-• Verificar status do webservice com a prefeitura
-• Testar em horário de menor movimento
-
-Resposta original: ${responseText}`);
-    }
-    
-    // Verificar se é texto simples (não XML)
-    if (!responseText.trim().startsWith('<')) {
-      throw new Error(`Resposta não é XML válido: ${responseText.substring(0, 100)}...`);
     }
     
     // Criar parser DOM para processar XML
@@ -879,31 +682,13 @@ Resposta original: ${responseText}`);
       console.error('❌ Erro de parsing XML:', parseError.textContent);
       throw new Error('Resposta XML inválida do webservice');
     }
-      // Verificar se é uma resposta SOAP Fault
-    const faultElement = xmlDoc.querySelector('soap\\:Fault, Fault, soapenv\\:Fault');
+    
+    // Verificar se é uma resposta SOAP Fault
+    const faultElement = xmlDoc.querySelector('soap\\:Fault, Fault');
     if (faultElement) {
-      // Tentar múltiplas formas de extrair a mensagem de erro
-      let faultString = faultElement.querySelector('faultstring, soap\\:faultstring, soapenv\\:faultstring')?.textContent;
-      let faultCode = faultElement.querySelector('faultcode, soap\\:faultcode, soapenv\\:faultcode')?.textContent || '';
-      let faultDetail = faultElement.querySelector('detail, soap\\:detail, soapenv\\:detail')?.textContent || '';
-      
-      // Se não encontrou faultstring, tentar outras possíveis tags
-      if (!faultString) {
-        faultString = faultElement.querySelector('Reason, reason, Message, message')?.textContent;
-      }
-      
-      // Se ainda não encontrou, usar o conteúdo texto completo do fault
-      if (!faultString) {
-        faultString = faultElement.textContent?.trim() || 'Erro SOAP não especificado';
-      }
-      
-      // Construir mensagem de erro amigável
-      let mensagemErro = `🚫 Erro SOAP do webservice`;
-      if (faultCode) mensagemErro += ` (${faultCode})`;
-      mensagemErro += `:\n\n${faultString}`;
-      if (faultDetail) mensagemErro += `\n\nDetalhes: ${faultDetail}`;
-      
-      throw new Error(mensagemErro);
+      const faultString = faultElement.querySelector('faultstring')?.textContent || 'Erro SOAP não especificado';
+      const faultCode = faultElement.querySelector('faultcode')?.textContent || '';
+      throw new Error(`Erro SOAP ${faultCode}: ${faultString}`);
     }
     
     // Procurar por erros na resposta
@@ -1002,150 +787,99 @@ function logRespostaParaDebug(responseText) {
   console.groupEnd();
 }
 
-// ==================================================
-// CONFIGURAÇÕES DE PROXIES ALTERNATIVOS PARA CORS
-// ==================================================
-
-// Proxies alternativos para contornar CORS
-const PROXIES_ALTERNATIVOS = [
-  {
-    nome: 'Cloudflare Worker',
-    url: 'https://nfse.mosaicoworkers.workers.dev/',
-    tipo: 'cloudflare',
-    suportaPost: true,
-    ativo: true // ✅ PRINCIPAL - Worker funcionando e configurado!
-  },
-  {
-    nome: 'Node.js Local',
-    url: 'http://localhost:3001/',
-    tipo: 'local',
-    suportaPost: true,
-    ativo: false // Backup local (ative se necessário)
-  },
-  {
-    nome: 'CORS Anywhere',
-    url: 'https://cors-anywhere.herokuapp.com/',
-    tipo: 'publico',
-    suportaPost: true,
-    ativo: false // Requer ativação manual
-  }
-];
-
-// Função para testar proxy alternativo
-async function testarProxyAlternativo(proxy) {
-  try {
-    const response = await fetch(proxy.url, { 
-      method: 'GET',
-      timeout: 5000 
-    });
-    
-    if (response.ok) {
-      const data = await response.text();
-      console.log(`✅ Proxy ${proxy.nome} funcionando!`);
-      return true;
-    }
-  } catch (error) {
-    console.log(`❌ Proxy ${proxy.nome} não disponível: ${error.message}`);
-  }
-  return false;
-}
-
-// Função para envio via proxy alternativo
-async function enviarViaProxyAlternativo(proxy, urlWebservice, soapEnvelope) {
-  console.log(`📡 Tentando envio via ${proxy.nome}...`);
-  
-  try {
-    if (proxy.tipo === 'local' || proxy.tipo === 'cloudflare') {
-      // Proxies que usam JSON payload
-      const response = await fetch(proxy.url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          url: urlWebservice,
-          soapEnvelope: soapEnvelope,
-          headers: {
-            'Content-Type': 'text/xml; charset=utf-8',
-            'SOAPAction': '""'
-          }
-        })
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        console.log(`✅ ${proxy.nome} funcionou!`, result);
-        return result.response;
-      } else {
-        throw new Error(result.error || 'Erro desconhecido');
-      }
-      
-    } else if (proxy.tipo === 'publico') {
-      // Proxies públicos que fazem forward direto
-      const response = await fetch(proxy.url + urlWebservice, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/xml; charset=utf-8',
-          'SOAPAction': '""'
-        },
-        body: soapEnvelope
-      });
-      
-      const responseText = await response.text();
-      console.log(`✅ ${proxy.nome} funcionou!`);
-      return responseText;
-    }
-    
-  } catch (error) {
-    console.error(`❌ Erro no proxy ${proxy.nome}:`, error.message);
-    throw error;
-  }
-}
-
-// ==================================================
-// FUNÇÕES ORIGINAIS DE ENVIO
-// ==================================================
-
 // ==================== ASSINATURA DIGITAL ====================
 
 // Aplicar assinatura digital usando certificado real
 async function aplicarAssinaturaDigital(xml, config) {
-  console.log('🔐 Aplicando assinatura digital...');
+  try {
+    // Verificar se há certificado validado
+    const certificadoValidado = localStorage.getItem('certificadoValidado');
+    
+    if (!certificadoValidado) {
+      return { 
+        sucesso: false, 
+        erro: 'Nenhum certificado validado encontrado. Execute o teste de certificado primeiro.' 
+      };
+    }
+    
+    const dadosCertificado = JSON.parse(certificadoValidado);
+    
+    if (config.certificado.tipo === 'A1') {
+      return await assinarComCertificadoA1(xml, dadosCertificado);
+    } else if (config.certificado.tipo === 'A3') {
+      return await assinarComTokenA3(xml, config.certificado.provider);
+    } else {
+      return { 
+        sucesso: false, 
+        erro: 'Tipo de certificado não suportado' 
+      };
+    }
+    
+  } catch (error) {
+    return { 
+      sucesso: false, 
+      erro: `Erro interno na assinatura: ${error.message}` 
+    };
+  }
+}
+
+// Assinar com certificado A1 usando Web Crypto API
+async function assinarComCertificadoA1(xml, dadosCertificado) {
+  console.log('🔐 Aplicando assinatura digital A1...');
+  await sleep(1000);
+  
+  // Verificar se o certificado ainda está válido
+  const agora = new Date();
+  const validade = new Date(dadosCertificado.validadeAte);
+  
+  if (agora > validade) {
+    return { 
+      sucesso: false, 
+      erro: 'Certificado expirado. Validade até: ' + validade.toLocaleDateString('pt-BR') 
+    };
+  }
   
   try {
-    // SEMPRE usar assinatura node-forge completa ABRASF
-    console.log('🔐 Aplicando assinatura COMPLETA ABRASF com node-forge...');
-    const xmlAssinado = await assinarXMLCompleto(xml, false); // false = usar certificado da configuração
+    // Em um ambiente real, seria usado Web Crypto API ou bibliotecas específicas
+    // Por enquanto, simulamos a assinatura mas com estrutura mais real
+    
+    // Gerar hash do conteúdo XML
+    const encoder = new TextEncoder();
+    const data = encoder.encode(xml);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    // Simular aplicação da assinatura no XML
+    const xmlAssinado = aplicarAssinaturaNoXML(xml, {
+      algoritmo: 'RSA-SHA256',
+      certificado: dadosCertificado,
+      hash: hashHex,
+      timestamp: new Date().toISOString()
+    });
     
     return {
       sucesso: true,
       xmlAssinado: xmlAssinado,
       certificadoInfo: {
-        titular: 'PIXEL VIVO SOLUCOES WEB LTDA',
-        cpfCnpj: '15198135000180',
-        emissor: 'AC Certisign RFB G5',
-        validade: '2026-06-12',
+        titular: dadosCertificado.nomeTitular,
+        cpfCnpj: dadosCertificado.cpfCnpj,
+        emissor: dadosCertificado.emissor,
+        validade: dadosCertificado.validadeAte,
         tipo: 'A1'
       },
+      hashAssinatura: hashHex,
       timestampAssinatura: new Date().toISOString()
     };
     
   } catch (error) {
-    console.error('❌ Erro na assinatura digital:', error);
+    console.error('❌ Erro na assinatura A1:', error);
     return { 
       sucesso: false, 
-      erro: `Erro na assinatura: ${error.message}` 
+      erro: `Erro ao aplicar assinatura: ${error.message}` 
     };
   }
 }
-
-/*
-// Função legada - não mais usada (agora usa aplicarAssinaturaDigital diretamente)
-// async function assinarComCertificadoA1(xml, dadosCertificado) {
-  // ... código comentado ...
-// }
-*/
 
 // Assinar com token A3 usando drivers nativos
 async function assinarComTokenA3(xml, provider) {
@@ -1242,10 +976,18 @@ async function processarAssinaturaA3(xml, tokenInfo) {
   try {
     // Gerar hash do XML
     const encoder = new TextEncoder();
-    const data = encoder.encode(xml);    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const data = encoder.encode(xml);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');    // Aplicar assinatura COMPLETA ABRASF com certificado .pfx da configuração
-    const xmlAssinado = await assinarXMLCompleto(xml, false); // false = usar certificado da configuração
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    // Simular assinatura com token (em produção usaria PKCS#11)
+    const xmlAssinado = aplicarAssinaturaNoXML(xml, {
+      algoritmo: 'RSA-SHA256',
+      token: tokenInfo,
+      hash: hashHex,
+      timestamp: new Date().toISOString()
+    });
     
     return {
       sucesso: true,
@@ -1273,66 +1015,38 @@ async function processarAssinaturaA3(xml, tokenInfo) {
 // ==================== APLICAÇÃO DE ASSINATURA NO XML ====================
 
 // Aplicar assinatura digital no XML (XMLDSig)
-// Aplicar assinatura XMLDSig mais próxima do real
-async function aplicarAssinaturaXMLDSig(xml, dadosCertificado) {
-  console.log('📝 Aplicando estrutura XMLDSig conforme padrão ABRASF...');
-  
-  // Gerar hash real do XML
-  const encoder = new TextEncoder();
-  const data = encoder.encode(xml);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const digestValue = btoa(String.fromCharCode(...hashArray));
-  
-  // Gerar um ID único para a assinatura
-  const signatureId = `sig-${Date.now()}`;
-  const referenceUri = `#${signatureId}`;
-  
-  // Criar a estrutura de assinatura conforme padrão ABRASF
-  const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">
-    <CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
-    <SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>
-    <Reference URI="">
-      <Transforms>
-        <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
-        <Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
-      </Transforms>
-      <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-      <DigestValue>${digestValue}</DigestValue>
-    </Reference>
-  </SignedInfo>`;
-  
-  // Gerar hash do SignedInfo
-  const signedInfoData = encoder.encode(signedInfo);
-  const signedInfoHashBuffer = await crypto.subtle.digest('SHA-256', signedInfoData);
-  const signedInfoHashArray = Array.from(new Uint8Array(signedInfoHashBuffer));
-  
-  // Simular assinatura do hash (em produção seria feita com chave privada real)
-  const mockSignatureValue = btoa(`MOCK-SIGNATURE-${Date.now()}-${signedInfoHashArray.slice(0, 8).join('')}`);
-  
-  // Simular certificado (em produção seria o certificado real)
-  const mockCertificate = btoa(`MOCK-CERT-${dadosCertificado.cpfCnpj}-${Date.now()}`);
-  
-  // Montar assinatura completa
-  const signature = `
-    <Signature xmlns="http://www.w3.org/2000/09/xmldsig#" Id="${signatureId}">
-      ${signedInfo}
-      <SignatureValue>${mockSignatureValue}</SignatureValue>
+function aplicarAssinaturaNoXML(xml, dadosAssinatura) {
+  // Criar elemento de assinatura XML seguindo padrão XMLDSig
+  const assinatura = `
+    <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+      <SignedInfo>
+        <CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+        <SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>
+        <Reference URI="">
+          <Transforms>
+            <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+            <Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+          </Transforms>
+          <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+          <DigestValue>${btoa(dadosAssinatura.hash)}</DigestValue>
+        </Reference>
+      </SignedInfo>
+      <SignatureValue>${gerarAssinaturaBase64(dadosAssinatura)}</SignatureValue>
       <KeyInfo>
         <X509Data>
-          <X509Certificate>${mockCertificate}</X509Certificate>
+          <X509Certificate>${gerarCertificadoBase64(dadosAssinatura)}</X509Certificate>
         </X509Data>
       </KeyInfo>
-    </Signature>`;
+    </Signature>
+  `;
   
-  // Inserir assinatura no local correto do XML conforme ABRASF
-  // A assinatura deve ir dentro do EnviarLoteRpsEnvio, após o LoteRps
+  // Inserir assinatura no XML antes do fechamento do elemento raiz
   const xmlAssinado = xml.replace(
-    /<\/LoteRps>/,
-    `</LoteRps>${signature}`
+    /<\/EnviarLoteRpsEnvio>/,
+    `  ${assinatura}\n</EnviarLoteRpsEnvio>`
   );
   
-  console.log('✅ Assinatura XMLDSig aplicada (estrutura ABRASF)');
+  console.log('✅ Assinatura digital aplicada no XML');
   return xmlAssinado;
 }
 
@@ -1453,9 +1167,9 @@ window.enviarParaWebservice = enviarParaWebservice;
 window.enviarParaWebserviceReal = enviarParaWebserviceReal;
 window.chamarWebservicePrefeitura = chamarWebservicePrefeitura;
 window.aplicarAssinaturaDigital = aplicarAssinaturaDigital;
-// window.assinarComCertificadoA1 = assinarComCertificadoA1; // REMOVIDO - função não existe mais
+window.assinarComCertificadoA1 = assinarComCertificadoA1;
 window.assinarComTokenA3 = assinarComTokenA3;
-window.aplicarAssinaturaXMLDSig = aplicarAssinaturaXMLDSig;
+window.aplicarAssinaturaNoXML = aplicarAssinaturaNoXML;
 window.validarCertificadoParaEnvio = validarCertificadoParaEnvio;
 window.obterMensagemErroAssinatura = obterMensagemErroAssinatura;
 window.gerarHashAssinatura = gerarHashAssinatura;
@@ -1575,64 +1289,3 @@ async function testarEndpoints() {
 
 // Adicionar ao escopo global
 window.testarEndpoints = testarEndpoints;
-
-// ==================== TESTE DE MÚLTIPLOS ENDPOINTS ====================
-
-// Testar múltiplas URLs para João Pessoa
-async function testarMultiplosEndpoints() {
-  const urlsParaTestar = [
-    'https://serem-hml.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap',
-    'https://serem.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap',
-    'https://nfse.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap',
-    'https://serem-hml.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/services/NotaFiscalSoap',
-    'https://serem-hml.joaopessoa.pb.gov.br/webservices/notafiscal/NotaFiscalSoap'
-  ];
-  
-  console.log('🔍 Testando múltiplos endpoints para João Pessoa...');
-  
-  for (const url of urlsParaTestar) {
-    try {
-      console.log(`🌐 Testando: ${url}`);
-      
-      // Testar WSDL primeiro
-      const wsdlResponse = await fetch(url + '?wsdl', {
-        method: 'GET',
-        mode: 'no-cors'
-      });
-      
-      console.log(`✅ WSDL acessível: ${url}?wsdl`);
-      
-      // Tentar um POST simples
-      const soapTestContent = `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Body>
-    <tns:ConsultarSituacaoLoteRps xmlns:tns="http://nfse.abrasf.org.br">
-      <tns:Protocolo>TESTE</tns:Protocolo>
-    </tns:ConsultarSituacaoLoteRps>
-  </soap:Body>
-</soap:Envelope>`;
-
-      const postResponse = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/xml; charset=utf-8',
-          'SOAPAction': ''
-        },
-        body: soapTestContent
-      });
-      
-      console.log(`📊 POST ${url}: ${postResponse.status} ${postResponse.statusText}`);
-      
-      if (postResponse.status !== 404) {
-        console.log(`✅ Endpoint funcional encontrado: ${url}`);
-        return url;
-      }
-      
-    } catch (error) {
-      console.log(`❌ Erro testando ${url}: ${error.message}`);
-    }
-  }
-  
-  console.log('❌ Nenhum endpoint funcional encontrado');
-  return null;
-}

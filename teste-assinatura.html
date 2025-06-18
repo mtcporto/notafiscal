@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de Carregamento - Assinatura</title>
+</head>
+<body>
+    <h1>Teste de Carregamento</h1>
+    <p>Abra o console (F12) para ver os logs</p>
+    
+    <button onclick="testarFuncoes()">Testar Funções</button>
+    
+    <script src="https://cdn.jsdelivr.net/npm/node-forge@1.3.1/dist/forge.min.js"></script>
+    <script src="assinatura-simples.js"></script>
+    
+    <script>
+        console.log('🧪 Página de teste carregada');
+        console.log('🔍 Node-forge:', typeof forge);
+        
+        function testarFuncoes() {
+            console.log('🧪 Testando funções...');
+            console.log('testeSimples:', typeof window.testeSimples);
+            console.log('testarAssinaturaCompletaABRASF:', typeof window.testarAssinaturaCompletaABRASF);
+            
+            if (typeof window.testeSimples === 'function') {
+                try {
+                    const resultado = window.testeSimples();
+                    console.log('✅ testeSimples executado:', resultado);
+                } catch (error) {
+                    console.error('❌ Erro ao executar testeSimples:', error);
+                }
+            }
+        }
+        
+        // Testar automaticamente após 2 segundos
+        setTimeout(testarFuncoes, 2000);
+    </script>
+</body>
+</html>
