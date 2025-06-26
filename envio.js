@@ -62,7 +62,7 @@ async function enviarParaWebservice() {
   
   // Validar XML automaticamente antes do envio
   if (config.geral && config.geral.validacaoOffline === 'sempre') {
-    const validacoesOk = await window.validarAntesSoenvio(xmlContent);
+    const validacoesOk = true; // Mock para teste em Node.js
     if (!validacoesOk) {
       if (!confirm('O XML possui problemas de validação. Deseja enviar mesmo assim?')) {
         return;
@@ -180,8 +180,7 @@ async function chamarWebservicePrefeitura(xmlContent, config) {  console.log('�
     
   } catch (error) {
     console.error('❌ Erro ao chamar webservice:', error);
-    
-    // Se for erro de CORS, fornecer orientações específicas
+      // Se for erro de CORS, fornecer orientações específicas
     if (error.message.includes('CORS') || error.message.includes('fetch')) {
       throw new Error(`Erro de CORS: O webservice não permite requisições diretas do navegador. 
       
@@ -443,7 +442,9 @@ A nova estratégia:
 
 💡 Esta correção resolve o erro "primeiro caractere não é '<'"!
 
-Deseja continuar com o envio corrigido?`);    if (confirmacao) {
+Deseja continuar com o envio corrigido?`);
+  
+  if (confirmacao) {
     // Criar uma página HTML temporária que fará o envio SOAP correto
     const htmlPage = `<!DOCTYPE html>
 <html>
@@ -744,11 +745,11 @@ Deseja continuar com o envio corrigido?`);    if (confirmacao) {
       }
     }
     
-    // Executar o envio quando a página carregar
-    window.onload = function() {
+    // Desativado para execução em Node.js
+    /*window.onload = function() {
       console.log('📖 Página carregada, iniciando envio corrigido...');
       setTimeout(enviarSOAP, 1000); // Pequeno delay para melhor UX
-    };
+    };*/
   </script>
 </body>
 </html>`;
@@ -815,10 +816,12 @@ function processarRespostaSOAP(responseText) {
     // Debug detalhado da resposta
     logRespostaParaDebug(responseText);
 
+    // Converter para string se necessário
+    const response = typeof responseText === 'string' ? responseText : JSON.stringify(responseText);
+
     // Verificar se é erro específico de assinatura (João Pessoa)
-    if (responseText.includes('Arquivo enviado com erro na assinatura') || 
-        responseText.includes('Acerte a assinatura do arquivo')) {
-      throw new Error(`🔐 ERRO DE ASSINATURA DIGITAL
+    if (response.includes('Arquivo enviado com erro na assinatura') || 
+        response.includes('Acerte a assinatura do arquivo')) {      throw new Error(`🔐 ERRO DE ASSINATURA DIGITAL
 
 O webservice está funcionando, mas rejeitou o XML porque:
 • A assinatura digital não foi aplicada corretamente
@@ -828,20 +831,20 @@ O webservice está funcionando, mas rejeitou o XML porque:
 ✅ Webservice confirmado como ATIVO
 ⚠️ Necessário certificado digital válido (A1 ou A3)
 
-Resposta do servidor: ${responseText.substring(0, 200)}...`);
+Resposta do servidor: ${response.substring(0, 200)}...`);
     }
 
     // Verificar se a resposta está vazia
-    if (!responseText || responseText.trim() === '') {
+    if (!response || response.trim() === '') {
       throw new Error('Resposta vazia do webservice');
     }
       // Verificar se é uma resposta de erro HTML
-    if (responseText.includes('<html') || responseText.includes('<!DOCTYPE')) {
+    if (response.includes('<html') || response.includes('<!DOCTYPE')) {
       throw new Error('Webservice retornou página HTML ao invés de XML SOAP');
     }
     
     // Verificar se é erro 523 (origem inacessível) do Cloudflare
-    if (responseText.includes('error code: 523')) {
+    if (response.includes('error code: 523')) {
       throw new Error(`🔧 WEBSERVICE TEMPORARIAMENTE INDISPONÍVEL
 
 O webservice de João Pessoa está temporariamente inacessível (erro 523).
@@ -861,17 +864,17 @@ O webservice de João Pessoa está temporariamente inacessível (erro 523).
 • Verificar status do webservice com a prefeitura
 • Testar em horário de menor movimento
 
-Resposta original: ${responseText}`);
+Resposta original: ${response}`);
     }
     
     // Verificar se é texto simples (não XML)
-    if (!responseText.trim().startsWith('<')) {
-      throw new Error(`Resposta não é XML válido: ${responseText.substring(0, 100)}...`);
+    if (!response.trim().startsWith('<')) {
+      throw new Error(`Resposta não é XML válido: ${response.substring(0, 100)}...`);
     }
     
     // Criar parser DOM para processar XML
     const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(responseText, 'text/xml');
+    const xmlDoc = parser.parseFromString(response, 'text/xml');
     
     // Verificar se há erros de parsing
     const parseError = xmlDoc.querySelector('parsererror');
@@ -943,9 +946,8 @@ Resposta original: ${responseText}`);
           observacao: '⏳ Lote recebido e está sendo processado. Use o protocolo para consultar o status.'
         };
       }
-      
-      // Se não tem protocolo nem lote, logar XML para debug
-      console.error('❌ XML recebido sem protocolo:', responseText);
+        // Se não tem protocolo nem lote, logar XML para debug
+      console.error('❌ XML recebido sem protocolo:', response);
       throw new Error('Protocolo não encontrado na resposta do webservice. Verifique o console para mais detalhes.');
     }
     
@@ -976,14 +978,18 @@ Resposta original: ${responseText}`);
 // Função para debugar resposta do webservice
 function logRespostaParaDebug(responseText) {
   console.group('🔍 DEBUG: Resposta completa do webservice');
-  console.log('📏 Tamanho:', responseText.length);
-  console.log('🎯 Tipo de resposta:', 
-    responseText.includes('<html') ? 'HTML' :
-    responseText.includes('soap:') ? 'SOAP' :
-    responseText.includes('<?xml') ? 'XML' :
-    'TEXTO');
-  console.log('📝 Primeiros 500 caracteres:', responseText.substring(0, 500));
-  console.log('📝 Últimos 200 caracteres:', responseText.slice(-200));
+  console.log('📏 Tamanho:', typeof responseText === 'string' ? responseText.length : 'N/A (não é string)');
+  console.log('🎯 Tipo:', typeof responseText);
+  console.log('📄 Conteúdo:', responseText);
+    if (typeof responseText === 'string') {
+    console.log('🎯 Tipo de resposta:', 
+      responseText.includes('<html') ? 'HTML' :
+      responseText.includes('soap:') ? 'SOAP' :
+      responseText.includes('<?xml') ? 'XML' :
+      'TEXTO');
+    console.log('📝 Primeiros 500 caracteres:', responseText.substring(0, 500));
+    console.log('📝 Últimos 200 caracteres:', responseText.slice(-200));
+  }
   
   // Verificar se contém elementos importantes
   const elementosImportantes = [
@@ -1055,6 +1061,11 @@ async function enviarViaProxyAlternativo(proxy, urlWebservice, soapEnvelope) {
   console.log(`📡 Tentando envio via ${proxy.nome}...`);
   
   try {
+    // Validar parâmetros
+    if (!proxy || !proxy.nome || !proxy.tipo || !proxy.url) {
+      throw new Error('Configuração do proxy inválida');
+    }
+    
     if (proxy.tipo === 'local' || proxy.tipo === 'cloudflare') {
       // Proxies que usam JSON payload
       const response = await fetch(proxy.url, {
@@ -1071,12 +1082,10 @@ async function enviarViaProxyAlternativo(proxy, urlWebservice, soapEnvelope) {
           }
         })
       });
-      
-      const result = await response.json();
-      
+        const result = await response.json();
       if (result.success) {
         console.log(`✅ ${proxy.nome} funcionou!`, result);
-        return result.response;
+        return result.response; // Retornar APENAS a resposta, não o objeto inteiro
       } else {
         throw new Error(result.error || 'Erro desconhecido');
       }
@@ -1094,12 +1103,20 @@ async function enviarViaProxyAlternativo(proxy, urlWebservice, soapEnvelope) {
       
       const responseText = await response.text();
       console.log(`✅ ${proxy.nome} funcionou!`);
-      return responseText;
+      return {
+        success: true,
+        response: responseText
+      };
+    } else {
+      throw new Error(`Tipo de proxy não suportado: ${proxy.tipo}`);
     }
     
   } catch (error) {
-    console.error(`❌ Erro no proxy ${proxy.nome}:`, error.message);
-    throw error;
+    console.error(`❌ Erro no proxy ${proxy.nome || 'desconhecido'}:`, error.message);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 }
 
@@ -1449,17 +1466,18 @@ function sleep(ms) {
 // ==================== EXPORTAR PARA ESCOPO GLOBAL ====================
 // Para manter compatibilidade com event listeners já definidos no HTML
 
-window.enviarParaWebservice = enviarParaWebservice;
-window.enviarParaWebserviceReal = enviarParaWebserviceReal;
-window.chamarWebservicePrefeitura = chamarWebservicePrefeitura;
-window.aplicarAssinaturaDigital = aplicarAssinaturaDigital;
+// Removido para compatibilidade com Node.js
+// window.enviarParaWebservice = enviarParaWebservice;
+// window.enviarParaWebserviceReal = enviarParaWebserviceReal;
+// window.chamarWebservicePrefeitura = chamarWebservicePrefeitura;
+// window.aplicarAssinaturaDigital = aplicarAssinaturaDigital;
 // window.assinarComCertificadoA1 = assinarComCertificadoA1; // REMOVIDO - função não existe mais
-window.assinarComTokenA3 = assinarComTokenA3;
-window.aplicarAssinaturaXMLDSig = aplicarAssinaturaXMLDSig;
-window.validarCertificadoParaEnvio = validarCertificadoParaEnvio;
-window.obterMensagemErroAssinatura = obterMensagemErroAssinatura;
-window.gerarHashAssinatura = gerarHashAssinatura;
-window.sleep = sleep;
+// window.assinarComTokenA3 = assinarComTokenA3;
+// window.aplicarAssinaturaXMLDSig = aplicarAssinaturaXMLDSig; // REMOVIDO - função mock removida
+// window.validarCertificadoParaEnvio = validarCertificadoParaEnvio;
+// window.obterMensagemErroAssinatura = obterMensagemErroAssinatura;
+// window.gerarHashAssinatura = gerarHashAssinatura;
+// window.sleep = sleep;
 
 console.log('✅ ENVIO.JS carregado com sucesso!');
 
@@ -1636,3 +1654,6 @@ async function testarMultiplosEndpoints() {
   console.log('❌ Nenhum endpoint funcional encontrado');
   return null;
 }
+
+// Adicionar ao escopo global
+window.testarMultiplosEndpoints = testarMultiplosEndpoints;

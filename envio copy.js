@@ -91,57 +91,7 @@ async function enviarParaWebservice() {
 // Enviar para webservice real da prefeitura
 async function enviarParaWebserviceReal(xml, config) {
   console.log('🌐 Iniciando envio real para webservice da prefeitura...');
-  
-  // ⚡ FORÇA USO DO XML PADRONIZADO (igual ao console que funciona)
-  console.log('⚡ Forçando uso do XML padronizado (igual ao console que funciona)...');
-  
-  const xmlPadronizado = `<?xml version="1.0" encoding="UTF-8"?>
-<EnviarLoteRpsEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
-    <LoteRps versao="2.03" Id="lote1">
-        <NumeroLote>1</NumeroLote>
-        <CpfCnpj><Cnpj>15198135000180</Cnpj></CpfCnpj>
-        <InscricaoMunicipal>122781-5</InscricaoMunicipal>
-        <QuantidadeRps>1</QuantidadeRps>
-        <ListaRps>
-            <Rps>
-                <InfRps Id="rps1">
-                    <IdentificacaoRps>
-                        <Numero>1</Numero>
-                        <Serie>1</Serie>
-                        <Tipo>1</Tipo>
-                    </IdentificacaoRps>
-                    <DataEmissao>2025-01-17</DataEmissao>
-                    <Status>1</Status>
-                    <Servico>
-                        <Valores>
-                            <ValorServicos>2500.00</ValorServicos>
-                            <Aliquota>0.02</Aliquota>
-                            <ValorIss>50.00</ValorIss>
-                            <ValorLiquidoNfse>2500.00</ValorLiquidoNfse>
-                        </Valores>
-                        <ItemListaServico>17.01</ItemListaServico>
-                        <CodigoTributacaoMunicipio>170101</CodigoTributacaoMunicipio>
-                        <Discriminacao>Desenvolvimento de software personalizado</Discriminacao>
-                    </Servico>
-                    <Prestador>
-                        <CpfCnpj><Cnpj>15198135000180</Cnpj></CpfCnpj>
-                        <InscricaoMunicipal>122781-5</InscricaoMunicipal>
-                    </Prestador>
-                    <Tomador>
-                        <CpfCnpj><Cnpj>11222333000144</Cnpj></CpfCnpj>
-                        <RazaoSocial>Cliente Teste LTDA</RazaoSocial>
-                    </Tomador>
-                </InfRps>
-            </Rps>
-        </ListaRps>
-    </LoteRps>
-</EnviarLoteRpsEnvio>`;
-  
-  console.log('📄 XML padronizado aplicado (igual ao console que funciona)');
-  console.log('🔍 Primeiros 500 chars:', xmlPadronizado.substring(0, 500));
-  
-  // Usar XML padronizado no lugar do XML original
-  xml = xmlPadronizado;
+  console.log('📄 XML recebido para envio:', xml.substring(0, 200) + '...');
   
   // Passo 1: Validação local do XML
   await sleep(500);
@@ -841,17 +791,18 @@ function obterUrlWebservicePadrao() {
   return 'https://serem-hml.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap';
 }
 
-// Criar envelope SOAP para envio (apenas com certificado digital - padrão ABRASF)
+// Criar envelope SOAP para envio conforme WSDL de João Pessoa
 function criarEnvelopeSOAP(xmlContent, versao = '2.03') {
-  // Envelope SOAP com namespaces corretos baseado no WSDL de João Pessoa
-  // O xmlContent já contém o EnviarLoteRpsEnvio completo
+  // Envelope SOAP conforme WSDL - document/literal com namespace correto
+  // SOAPAction vazia conforme binding SOAP
+  // CORRIGIDO: remover declaração XML duplicada do conteúdo
+  const xmlSemDeclaracao = xmlContent.replace(/^<\?xml[^>]*\?>\s*/, '');
   return `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" 
-               xmlns:tns="http://nfse.abrasf.org.br">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
-    <tns:RecepcionarLoteRps>
-      ${xmlContent}
-    </tns:RecepcionarLoteRps>
+    <RecepcionarLoteRps xmlns="http://nfse.abrasf.org.br">
+      ${xmlSemDeclaracao}
+    </RecepcionarLoteRps>
   </soap:Body>
 </soap:Envelope>`;
 }
@@ -1104,6 +1055,11 @@ async function enviarViaProxyAlternativo(proxy, urlWebservice, soapEnvelope) {
   console.log(`📡 Tentando envio via ${proxy.nome}...`);
   
   try {
+    // Validar parâmetros
+    if (!proxy || !proxy.nome || !proxy.tipo || !proxy.url) {
+      throw new Error('Configuração do proxy inválida');
+    }
+    
     if (proxy.tipo === 'local' || proxy.tipo === 'cloudflare') {
       // Proxies que usam JSON payload
       const response = await fetch(proxy.url, {
@@ -1122,10 +1078,12 @@ async function enviarViaProxyAlternativo(proxy, urlWebservice, soapEnvelope) {
       });
       
       const result = await response.json();
-      
       if (result.success) {
         console.log(`✅ ${proxy.nome} funcionou!`, result);
-        return result.response;
+        return {
+          success: true,
+          response: result.response
+        };
       } else {
         throw new Error(result.error || 'Erro desconhecido');
       }
@@ -1143,12 +1101,20 @@ async function enviarViaProxyAlternativo(proxy, urlWebservice, soapEnvelope) {
       
       const responseText = await response.text();
       console.log(`✅ ${proxy.nome} funcionou!`);
-      return responseText;
+      return {
+        success: true,
+        response: responseText
+      };
+    } else {
+      throw new Error(`Tipo de proxy não suportado: ${proxy.tipo}`);
     }
     
   } catch (error) {
-    console.error(`❌ Erro no proxy ${proxy.nome}:`, error.message);
-    throw error;
+    console.error(`❌ Erro no proxy ${proxy.nome || 'desconhecido'}:`, error.message);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 }
 

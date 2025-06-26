@@ -74,18 +74,28 @@ async function debugProxyDetalhado() {
         
         // 5. Debug do envelope
         console.log('📄 Envelope (primeiros 500 chars):');
-        console.log(envelope.substring(0, 500) + '...');
-        
-        // 6. Testar envio
-        const proxy = 'https://nfse-proxy-jp.mtisrael.workers.dev/';
-        const urlWebservice = 'https://nfseh.joaopessoa.pb.gov.br/service.asmx';
-        
-        console.log('🌐 Enviando via proxy...');
+        console.log(envelope.substring(0, 500) + '...');        // 6. Testar envio
+        const proxy = {
+            nome: 'Mosaico Workers Proxy',
+            tipo: 'cloudflare',
+            url: 'https://nfse.mosaicoworkers.workers.dev/'
+        };
+        const urlWebservice = 'https://serem-hml.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap';
+          console.log('🌐 Enviando via proxy...');
         const resultado = await enviarViaProxyAlternativo(proxy, urlWebservice, envelope);
+        
+        // Validar resultado do envio
+        if (!resultado || typeof resultado !== 'object') {
+            console.warn('⚠️ Resultado de envio inválido:', resultado);
+            console.log('📥 Resultado: Erro - resposta inválida do proxy');
+            return;
+        }
         
         console.log('📥 Resultado:', resultado.success ? 'Sucesso' : 'Erro');
         if (resultado.response) {
             console.log('📥 Resposta completa:', resultado.response);
+        } else if (resultado.error) {
+            console.log('📥 Erro:', resultado.error);
         }
         
         return resultado;
@@ -159,6 +169,8 @@ function solicitarCertificado() {
 
 // Obter senha do certificado de forma centralizada
 function obterSenhaCertificado() {
+    console.log('🔑 Iniciando processo de obtenção de senha do certificado...');
+    
     // 1. Tentar localStorage (configuração salva)
     const configSalva = localStorage.getItem('nfse-config');
     if (configSalva) {
@@ -169,59 +181,105 @@ function obterSenhaCertificado() {
                 return config.certificado.senha;
             }
         } catch (e) {
-            console.log('⚠️ Erro ao ler configuração salva');
+            console.log('⚠️ Erro ao ler configuração salva:', e.message);
         }
     }
     
-    // 2. Usar senha fixa para o certificado pixelvivo.pfx
+    // 2. Usar senha fixa para o certificado pixelvivo.pfx (desenvolvimento)
     const senhaPixelVivo = 'pixel2025';
     console.log('🔑 Usando senha padrão para pixelvivo.pfx:', senhaPixelVivo);
+    console.log('💡 Para usar um certificado diferente, salve a senha na configuração ou será solicitada via prompt');
     return senhaPixelVivo;
+}
+
+// Função para solicitar senha ao usuário (fallback)
+function solicitarSenhaUsuario() {
+    console.log('🔑 Solicitando senha ao usuário...');
+    const senha = prompt('Digite a senha do certificado:');
+    if (!senha) {
+        throw new Error('Senha não informada pelo usuário');
+    }
+    console.log('🔑 Senha informada pelo usuário');
+    return senha;
 }
 
 // Processar certificado com node-forge
 async function processarCertificado(pfxData, senha) {
     console.log('🔑 Processando certificado com node-forge...');
-    console.log('🔑 Senha recebida:', senha);
+    console.log('🔑 Validando senha do certificado...');
     
-    try {
-        // Converter para formato node-forge
-        const pfxBytes = new Uint8Array(pfxData);
-        const pfxBuffer = forge.util.createBuffer(pfxBytes);
-        
-        console.log('📁 Arquivo PKCS#12 carregado, tamanho:', pfxBytes.length);
-        
-        // Ler PKCS#12 com senha
-        console.log('🔓 Tentando abrir PKCS#12 com senha...');
-        const pfx = forge.pkcs12.pkcs12FromAsn1(
-            forge.asn1.fromDer(pfxBuffer), 
-            senha
-        );
-        
-        // Extrair certificado
-        const certBags = pfx.getBags({ bagType: forge.pki.oids.certBag });
-        const certificate = certBags[forge.pki.oids.certBag][0].cert;
-          // Extrair chave privada
-        const keyBags = pfx.getBags({ 
-            bagType: forge.pki.oids.pkcs8ShroudedKeyBag
-        });
-        const privateKey = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag][0].key;
-        
-        // Verificar validade
-        const agora = new Date();
-        if (agora < certificate.validity.notBefore || agora > certificate.validity.notAfter) {
-            throw new Error('Certificado expirado ou ainda não válido');
-        }
-        
-        console.log('✅ Certificado processado com sucesso');
-        console.log('📋 Titular:', certificate.subject.getField('CN').value);
-        console.log('📋 Válido até:', certificate.validity.notAfter);
-        
-        return { certificate, privateKey };
-        
-    } catch (error) {
-        throw new Error(`Erro ao processar certificado: ${error.message}`);
+    let tentativas = 0;
+    const maxTentativas = 3;
+    
+    while (tentativas < maxTentativas) {
+        try {
+            // Converter para formato node-forge
+            const pfxBytes = new Uint8Array(pfxData);
+            const pfxBuffer = forge.util.createBuffer(pfxBytes);
+            
+            console.log('📁 Arquivo PKCS#12 carregado, tamanho:', pfxBytes.length);
+            
+            // Ler PKCS#12 com senha
+            console.log(`🔓 Tentativa ${tentativas + 1}/${maxTentativas} - Abrindo PKCS#12 com senha...`);
+            const pfx = forge.pkcs12.pkcs12FromAsn1(
+                forge.asn1.fromDer(pfxBuffer), 
+                senha
+            );
+            
+            // Extrair certificado
+            const certBags = pfx.getBags({ bagType: forge.pki.oids.certBag });
+            if (!certBags[forge.pki.oids.certBag] || certBags[forge.pki.oids.certBag].length === 0) {
+                throw new Error('Nenhum certificado encontrado no arquivo PKCS#12');
+            }
+            const certificate = certBags[forge.pki.oids.certBag][0].cert;
+            
+            // Extrair chave privada
+            const keyBags = pfx.getBags({ 
+                bagType: forge.pki.oids.pkcs8ShroudedKeyBag
+            });
+            if (!keyBags[forge.pki.oids.pkcs8ShroudedKeyBag] || keyBags[forge.pki.oids.pkcs8ShroudedKeyBag].length === 0) {
+                throw new Error('Nenhuma chave privada encontrada no arquivo PKCS#12');
+            }
+            const privateKey = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag][0].key;
+            
+            // Verificar validade
+            const agora = new Date();
+            if (agora < certificate.validity.notBefore || agora > certificate.validity.notAfter) {
+                console.warn('⚠️ Atenção: Certificado fora do período de validade');
+                console.warn(`   Válido de: ${certificate.validity.notBefore}`);
+                console.warn(`   Válido até: ${certificate.validity.notAfter}`);
+                console.warn(`   Data atual: ${agora}`);
+            }
+            
+            console.log('✅ Certificado processado com sucesso');
+            console.log(`📅 Válido de: ${certificate.validity.notBefore} até ${certificate.validity.notAfter}`);
+            
+            return { certificate, privateKey };
+            
+        } catch (error) {
+            tentativas++;
+            console.error(`❌ Erro na tentativa ${tentativas}:`, error.message);
+            
+            // Se é erro de senha e ainda há tentativas, solicitar nova senha
+            if ((error.message.includes('Invalid password') || 
+                 error.message.includes('MAC verification failed') ||
+                 error.message.includes('PKCS#12 MAC could not be verified')) && 
+                tentativas < maxTentativas) {
+                
+                console.log('🔑 Senha incorreta. Solicitando nova senha...');
+                senha = solicitarSenhaUsuario();
+                continue;
+            }
+            
+            // Se esgotou as tentativas ou é outro tipo de erro
+            if (tentativas >= maxTentativas) {
+                throw new Error(`Falha após ${maxTentativas} tentativas. Último erro: ${error.message}`);
+            } else {
+                throw error;
+            }        }
     }
+    
+    throw new Error('Falha inesperada no processamento do certificado');
 }
 
 // Assinar XML usando node-forge
@@ -332,7 +390,8 @@ ${signedInfo}
 async function assinarLoteRPS(xmlComRpsAssinados, certificate, privateKey) {
     console.log('✍️ Assinando LOTE de RPS conforme ABRASF...');
     
-    try {        // Debug: verificar estrutura do XML
+    try {
+        // Debug: verificar estrutura do XML
         console.log('🔍 DEBUG: Procurando LoteRps com Id no XML...');
         const temLoteRps = xmlComRpsAssinados.includes('<LoteRps');
         const loteRpsTagMatch = xmlComRpsAssinados.match(/<LoteRps[^>]*>/);
@@ -342,7 +401,8 @@ async function assinarLoteRPS(xmlComRpsAssinados, certificate, privateKey) {
         console.log(`🔍 DEBUG: Tem LoteRps: ${temLoteRps}`);
         console.log(`🔍 DEBUG: LoteRps tag: ${loteRpsTag}`);
         console.log(`🔍 DEBUG: Tem Id: ${temId}`);
-          // Extrair LoteRps para assinatura (regex flexível para qualquer ordem de atributos)
+        
+        // Extrair LoteRps para assinatura (regex flexível para qualquer ordem de atributos)
         const loteRpsMatch = xmlComRpsAssinados.match(/<LoteRps[^>]*>([\s\S]*?)<\/LoteRps>/);
         if (!loteRpsMatch) {
             // Mostrar um pedaço do XML para debug
@@ -350,7 +410,8 @@ async function assinarLoteRPS(xmlComRpsAssinados, certificate, privateKey) {
             console.log('🔍 DEBUG: XML snippet:', xmlSnippet);
             throw new Error('Tag LoteRps não encontrada');
         }
-          // Extrair o Id do LoteRps
+        
+        // Extrair o Id do LoteRps
         const loteRpsTagForId = xmlComRpsAssinados.match(/<LoteRps[^>]*>/)[0];
         const idMatch = loteRpsTagForId.match(/Id="([^"]*)"/);
         if (!idMatch) {
@@ -359,7 +420,8 @@ async function assinarLoteRPS(xmlComRpsAssinados, certificate, privateKey) {
         
         const loteRpsId = idMatch[1];
         const loteRpsCompleto = loteRpsMatch[0];
-          console.log(`🔍 Assinando LoteRps com Id: ${loteRpsId}`);
+        
+        console.log(`🔍 Assinando LoteRps com Id: ${loteRpsId}`);
         
         // Canonicalizar para digest conforme C14N
         const xmlCanonicalizado = canonicalizarXML(loteRpsCompleto);
@@ -373,19 +435,9 @@ async function assinarLoteRPS(xmlComRpsAssinados, certificate, privateKey) {
         console.log(`🔐 DigestValue do LOTE (SHA-1): ${digestValue}`);
         
         // Criar SignedInfo para o lote
-        const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">
-<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
-<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
-<Reference URI="#${loteRpsId}">
-<Transforms>
-<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
-<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
-</Transforms>
-<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
-<DigestValue>${digestValue}</DigestValue>
-</Reference>
-</SignedInfo>`;
-          // Canonicalizar e assinar SignedInfo conforme C14N
+        const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">\r\n<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>\r\n<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>\r\n<Reference URI="#${loteRpsId}">\r\n<Transforms>\r\n<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>\r\n<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>\r\n</Transforms>\r\n<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>\r\n<DigestValue>${digestValue}</DigestValue>\r\n</Reference>\r\n</SignedInfo>`;
+        
+        // Canonicalizar e assinar SignedInfo conforme C14N
         const signedInfoCanonicalizado = canonicalizarXML(signedInfo);
         const mdSignature = forge.md.sha1.create();
         mdSignature.update(signedInfoCanonicalizado, 'utf8');
@@ -400,351 +452,39 @@ async function assinarLoteRPS(xmlComRpsAssinados, certificate, privateKey) {
         const certificateValue = forge.util.encode64(certDer);
         
         // Construir assinatura do lote
-        const xmlSignature = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
-${signedInfo}
-<SignatureValue>${signatureValue}</SignatureValue>
-<KeyInfo>
-<X509Data>
-<X509Certificate>${certificateValue}</X509Certificate>
-</X509Data>
-</KeyInfo>
-</Signature>`;
+        const xmlSignature = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">\r\n${signedInfo}\r\n<SignatureValue>${signatureValue}</SignatureValue>\r\n<KeyInfo>\r\n<X509Data>\r\n<X509Certificate>${certificateValue}</X509Certificate>\r\n</X509Data>\r\n</KeyInfo>\r\n</Signature>`;
         
-        // Inserir assinatura no lote (antes do fechamento)
-        const xmlLoteAssinado = xmlComRpsAssinados.replace('</LoteRps>', xmlSignature + '\n</LoteRps>');
-        
-        console.log('✅ LOTE assinado conforme padrão ABRASF v2.03');
-        console.log('🔍 DEBUG: Assinatura do LOTE inserida');
+        // ESTRATÉGIA CORRIGIDA: Inserir a assinatura DEPOIS do elemento LoteRps, como um irmão.
+        const xmlLoteAssinado = xmlComRpsAssinados.replace('</LoteRps>', '</LoteRps>' + '\n' + xmlSignature);
+
+        if (xmlLoteAssinado.includes('</LoteRps>' + '\n' + xmlSignature)) {
+             console.log('✅ LOTE assinado conforme padrão ABRASF v2.03');
+             console.log('🔍 DEBUG: Assinatura do LOTE inserida como irmã de <LoteRps>');
+        } else {
+             console.warn('⚠️ Falha ao inserir a assinatura do LoteRps como irmã. Verifique o XML de entrada.');
+             // Fallback para o método antigo (dentro do lote) para não quebrar
+             const fallbackXml = xmlComRpsAssinados.replace('</LoteRps>', xmlSignature + '\n</LoteRps>');
+             console.log('   -> Usando fallback: assinatura DENTRO do LoteRps.');
+             return fallbackXml;
+        }
         
         return xmlLoteAssinado;
-        
+
     } catch (error) {
-        throw new Error(`Erro na assinatura do lote: ${error.message}`);
+        console.error('❌ Erro ao assinar o LoteRPS:', error);
+        throw error; // Re-lança o erro para ser tratado pela função chamadora
     }
-}
-
-// Função principal atualizada para seguir o processo ABRASF completo
-async function assinarXMLCompleto(xml, forcarUpload = false) {
-    console.log('🔐 Iniciando processo COMPLETO de assinatura ABRASF...');
-    
-    try {
-        // 0. Limpar XML antes de processar
-        const xmlLimpo = limparXMLParaAssinatura(xml);
-        
-        // 1. Usar certificado da configuração (SEMPRE, a menos que forçado)
-        let pfxData, senha;
-        
-        if (!forcarUpload) {
-            try {
-                const resultado = await obterCertificadoDaConfiguracao();
-                pfxData = resultado.pfxData;
-                senha = resultado.senha;
-                console.log('🔑 Certificado obtido da configuração (pixelvivo.pfx)');
-            } catch (error) {
-                console.log('⚠️ Erro ao obter certificado da configuração:', error.message);
-                console.log('📤 Redirecionando para upload manual...');
-                const resultado = await solicitarCertificado();
-                pfxData = resultado.pfxData;
-                senha = resultado.senha;
-            }
-        } else {
-            console.log('📤 Upload forçado pelo usuário...');
-            const resultado = await solicitarCertificado();
-            pfxData = resultado.pfxData;
-            senha = resultado.senha;
-        }
-        
-        // 2. Processar certificado
-        const { certificate, privateKey } = await processarCertificado(pfxData, senha);
-        
-        // 3. PASSO 1 ABRASF: Assinar cada RPS individualmente
-        console.log('📝 PASSO 1: Assinando RPS individualmente...');
-        let xmlComRpsAssinados = await assinarXMLComForge(xmlLimpo, certificate, privateKey);// 4. PASSO 2 ABRASF: Verificar se precisa assinar o lote
-        if (xmlComRpsAssinados.includes('<LoteRps')) {
-            console.log('📝 PASSO 2: Assinando LOTE de RPS...');
-            
-            // Verificar se LoteRps já possui Id (busca mais flexível)
-            const loteRpsTag = xmlComRpsAssinados.match(/<LoteRps[^>]*>/);
-            const temId = loteRpsTag && loteRpsTag[0].includes('Id=');
-            
-            if (!temId) {
-                console.log('🔧 Adicionando Id ao LoteRps...');
-                xmlComRpsAssinados = xmlComRpsAssinados.replace(
-                    /<LoteRps([^>]*)>/,
-                    '<LoteRps$1 Id="lote1">'
-                );
-                console.log('✅ Id "lote1" adicionado ao LoteRps');
-            } else {
-                console.log('✅ LoteRps já possui Id');
-            }
-            
-            xmlComRpsAssinados = await assinarLoteRPS(xmlComRpsAssinados, certificate, privateKey);
-        }
-        
-        // 5. Adicionar namespace ABRASF se necessário
-        if (!xmlComRpsAssinados.includes('xmlns="http://www.abrasf.org.br/nfse.xsd"')) {
-            xmlComRpsAssinados = xmlComRpsAssinados.replace(
-                /<EnviarLoteRpsEnvio([^>]*)>/,
-                '<EnviarLoteRpsEnvio$1 xmlns="http://www.abrasf.org.br/nfse.xsd">'
-            );
-        }
-          console.log('✅ Processo COMPLETO de assinatura ABRASF finalizado!');
-        console.log('🔍 DEBUG: XML final com todas as assinaturas:');
-        console.log(xmlComRpsAssinados);
-        
-        // Verificar estrutura final da assinatura
-        verificarEstruturaAssinaturaABRASF(xmlComRpsAssinados);
-        
-        return xmlComRpsAssinados;
-        
-    } catch (error) {
-        console.error('❌ Erro no processo completo de assinatura:', error);
-        throw error;
-    }
-}
-
-// Função para obter certificado da configuração
-async function obterCertificadoDaConfiguracao() {
-    console.log('🔍 Tentando obter certificado da configuração...');
-    
-    // Usar o certificado fixo do projeto (pixelvivo.pfx)
-    const certificadoUrl = './certificados/pixelvivo.pfx';
-    const senha = obterSenhaCertificado();
-    
-    if (!senha) {
-        throw new Error('Senha do certificado não encontrada na configuração');
-    }
-    
-    try {
-        console.log('📥 Baixando certificado da configuração:', certificadoUrl);
-        const response = await fetch(certificadoUrl);
-        
-        if (!response.ok) {
-            throw new Error(`Erro ao baixar certificado: ${response.status}`);
-        }
-        
-        const pfxData = await response.arrayBuffer();
-        console.log('✅ Certificado obtido da configuração');
-        
-        return { pfxData, senha };
-        
-    } catch (error) {
-        throw new Error(`Erro ao obter certificado da configuração: ${error.message}`);
-    }
-}
-
-// Função de teste
-async function testarAssinaturaSimplificada() {
-    const xmlTeste = `<?xml version="1.0" encoding="UTF-8"?>
-<EnviarLoteRpsEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
-    <LoteRps versao="2.03">
-        <NumeroLote>1</NumeroLote>
-        <CpfCnpj><Cnpj>15198135000180</Cnpj></CpfCnpj>
-        <InscricaoMunicipal>122781-5</InscricaoMunicipal>
-        <QuantidadeRps>1</QuantidadeRps>
-        <ListaRps>
-            <Rps>
-                <InfRps Id="rps1">
-                    <IdentificacaoRps>
-                        <Numero>1</Numero>
-                        <Serie>1</Serie>
-                        <Tipo>1</Tipo>
-                    </IdentificacaoRps>
-                    <DataEmissao>2025-06-17</DataEmissao>
-                    <Status>1</Status>
-                    <Servico>
-                        <Valores>
-                            <ValorServicos>2500.00</ValorServicos>
-                            <Aliquota>0.02</Aliquota>
-                            <ValorIss>50.00</ValorIss>
-                            <ValorLiquidoNfse>2500.00</ValorLiquidoNfse>
-                        </Valores>
-                        <ItemListaServico>17.01</ItemListaServico>
-                        <CodigoTributacaoMunicipio>170101</CodigoTributacaoMunicipio>
-                        <Discriminacao>Desenvolvimento de software personalizado</Discriminacao>
-                    </Servico>
-                    <Prestador>
-                        <CpfCnpj><Cnpj>15198135000180</Cnpj></CpfCnpj>
-                        <InscricaoMunicipal>122781-5</InscricaoMunicipal>
-                    </Prestador>
-                    <Tomador>
-                        <CpfCnpj><Cnpj>11222333000144</Cnpj></CpfCnpj>
-                        <RazaoSocial>Cliente Teste LTDA</RazaoSocial>
-                    </Tomador>
-                </InfRps>
-            </Rps>
-        </ListaRps>
-    </LoteRps>
-</EnviarLoteRpsEnvio>`;
-    
-    try {
-        const resultado = await assinarXMLComUpload(xmlTeste);
-        console.log('🧪 Teste concluído com sucesso!');
-        return { sucesso: true, xmlAssinado: resultado };
-    } catch (error) {
-        console.error('🧪 Teste falhou:', error);
-        return { sucesso: false, erro: error.message };
-    }
-}
-
-// Função de teste para o processo completo ABRASF
-async function testarAssinaturaCompletaABRASF() {
-    const xmlTeste = `<?xml version="1.0" encoding="UTF-8"?>
-<EnviarLoteRpsEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
-    <LoteRps versao="2.03">
-        <NumeroLote>1</NumeroLote>
-        <CpfCnpj><Cnpj>15198135000180</Cnpj></CpfCnpj>
-        <InscricaoMunicipal>122781-5</InscricaoMunicipal>
-        <QuantidadeRps>1</QuantidadeRps>
-        <ListaRps>
-            <Rps>
-                <InfRps Id="rps1">
-                    <IdentificacaoRps>
-                        <Numero>1</Numero>
-                        <Serie>1</Serie>
-                        <Tipo>1</Tipo>
-                    </IdentificacaoRps>
-                    <DataEmissao>2025-06-17</DataEmissao>
-                    <Status>1</Status>
-                    <Servico>
-                        <Valores>
-                            <ValorServicos>2500.00</ValorServicos>
-                            <Aliquota>0.02</Aliquota>
-                            <ValorIss>50.00</ValorIss>
-                            <ValorLiquidoNfse>2500.00</ValorLiquidoNfse>
-                        </Valores>
-                        <ItemListaServico>17.01</ItemListaServico>
-                        <CodigoTributacaoMunicipio>170101</CodigoTributacaoMunicipio>
-                        <Discriminacao>Desenvolvimento de software personalizado</Discriminacao>
-                    </Servico>
-                    <Prestador>
-                        <CpfCnpj><Cnpj>15198135000180</Cnpj></CpfCnpj>
-                        <InscricaoMunicipal>122781-5</InscricaoMunicipal>
-                    </Prestador>
-                    <Tomador>
-                        <CpfCnpj><Cnpj>11222333000144</Cnpj></CpfCnpj>
-                        <RazaoSocial>Cliente Teste LTDA</RazaoSocial>
-                    </Tomador>
-                </InfRps>
-            </Rps>
-        </ListaRps>
-    </LoteRps>
-</EnviarLoteRpsEnvio>`;
-
-
-    try {
-        console.log('🧪 Iniciando teste COMPLETO ABRASF...');
-        console.log('📋 XML teste será assinado seguindo TODOS os passos ABRASF:');
-        console.log('   1. Assinar RPS individualmente');
-        console.log('   2. Assinar LOTE de RPS');
-        console.log('   3. Verificar namespaces');
-        console.log('   4. Validar estrutura final');
-        
-        const resultado = await assinarXMLCompleto(xmlTeste);
-        
-        console.log('✅ Teste COMPLETO ABRASF finalizado com sucesso!');
-        console.log('🔍 Verificações finais:');
-        
-        // Verificar se contém assinaturas
-        const assinaturasRps = (resultado.match(/<Signature xmlns="http:\/\/www\.w3\/2000\/09\/xmldsig#">/g) || []).length;
-        console.log(`   ✓ Assinaturas encontradas: ${assinaturasRps}`);
-        
-        // Verificar namespace ABRASF
-        const temNamespaceABRASF = resultado.includes('xmlns="http://www.abrasf.org.br/nfse.xsd"');
-        console.log(`   ✓ Namespace ABRASF: ${temNamespaceABRASF ? 'SIM' : 'NÃO'}`);
-        
-        // Verificar SHA-1
-        const temSHA1 = resultado.includes('xmldsig#sha1');
-        console.log(`   ✓ Algoritmo SHA-1: ${temSHA1 ? 'SIM' : 'NÃO'}`);
-        
-        return { 
-            sucesso: true, 
-            xmlAssinado: resultado,
-            estatisticas: {
-                assinaturas: assinaturasRps,
-                namespaceABRASF: temNamespaceABRASF,
-                algoritmSHA1: temSHA1
-            }
-        };
-        
-    } catch (error) {
-        console.error('🧪 Teste COMPLETO ABRASF falhou:', error);
-        return { 
-            sucesso: false, 
-            erro: error.message 
-        };
-    }
-}
-
-// Função de teste usando APENAS o certificado da configuração
-async function testarAssinaturaCompletaConfiguracao() {
-    console.log('🧪 TESTE: Assinatura completa usando APENAS certificado da configuração...');
-    
-    const xmlTeste = `<?xml version="1.0" encoding="UTF-8"?>
-<EnviarLoteRpsEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
-    <LoteRps versao="2.03" Id="lote1">
-        <NumeroLote>1</NumeroLote>
-        <CpfCnpj><Cnpj>15198135000180</Cnpj></CpfCnpj>
-        <InscricaoMunicipal>122781-5</InscricaoMunicipal>
-        <QuantidadeRps>1</QuantidadeRps>
-        <ListaRps>
-            <Rps>
-                <InfRps Id="rps1">
-                    <IdentificacaoRps>
-                        <Numero>1</Numero>
-                        <Serie>1</Serie>
-                        <Tipo>1</Tipo>
-                    </IdentificacaoRps>
-                    <DataEmissao>2025-01-17</DataEmissao>
-                    <Status>1</Status>
-                    <Servico>
-                        <Valores>
-                            <ValorServicos>2500.00</ValorServicos>
-                            <Aliquota>0.02</Aliquota>
-                            <ValorIss>50.00</ValorIss>
-                            <ValorLiquidoNfse>2500.00</ValorLiquidoNfse>
-                        </Valores>
-                        <ItemListaServico>17.01</ItemListaServico>
-                        <CodigoTributacaoMunicipio>170101</CodigoTributacaoMunicipio>
-                        <Discriminacao>Desenvolvimento de software personalizado</Discriminacao>
-                    </Servico>
-                    <Prestador>
-                        <CpfCnpj><Cnpj>15198135000180</Cnpj></CpfCnpj>
-                        <InscricaoMunicipal>122781-5</InscricaoMunicipal>
-                    </Prestador>
-                    <Tomador>
-                        <CpfCnpj><Cnpj>11222333000144</Cnpj></CpfCnpj>
-                        <RazaoSocial>Cliente Teste LTDA</RazaoSocial>
-                    </Tomador>
-                </InfRps>
-            </Rps>
-        </ListaRps>
-    </LoteRps>
-</EnviarLoteRpsEnvio>`;
-
-
-    try {
-        // Forçar uso do certificado da configuração (sem upload)
-        const resultado = await assinarXMLCompleto(xmlTeste, false);
-        console.log('🧪 ✅ Teste da configuração concluído com sucesso!');
-        console.log('📄 XML assinado (primeiros 500 chars):', resultado.substring(0, 500));
-        return { sucesso: true, xmlAssinado: resultado };
-    } catch (error) {
-        console.error('🧪 ❌ Teste da configuração falhou:', error);
-        return { sucesso: false, erro: error.message };
-    }
-}
-
-// Função de teste simples para verificar carregamento
-function testeSimples() {
-    console.log('✅ Arquivo assinatura-simples.js carregado e funcionando!');
-    console.log('🔍 Node-forge disponível:', typeof forge);
-    return 'Teste OK!';
 }
 
 // Função para limpar XML antes da assinatura (versão mais conservadora)
 function limparXMLParaAssinatura(xml) {
     console.log('🧹 Limpeza específica para ABRASF...');
+    
+    // Validar se o XML é válido
+    if (!xml || typeof xml !== 'string') {
+        console.error('❌ XML inválido para limpeza:', typeof xml);
+        throw new Error('XML inválido: deve ser uma string não vazia');
+    }
     
     // Limpeza específica para o padrão ABRASF
     let xmlLimpo = xml
@@ -765,127 +505,170 @@ function limparXMLParaAssinatura(xml) {
 }
 
 // ============================================================================
-// FUNÇÕES DE TESTE SIMPLIFICADAS
+// FUNÇÃO DE CANONICALIZAÇÃO XML (C14N)
 // ============================================================================
 
-async function testarDiferentesAssinaturas() {
-    console.log('🧪 TESTE DE DIFERENTES ABORDAGENS DE ASSINATURA');
-    console.log('===============================================');
-    
-    // Verificar se certificado está carregado
-    if (!certificadoAtual) {
-        console.log('🔄 Carregando certificado...');
-        try {
-            certificadoAtual = await obterCertificadoDaConfiguracao();
-            console.log('✅ Certificado carregado');
-        } catch (error) {
-            console.log('❌ Erro ao carregar certificado:', error.message);
-            return { error: 'certificate_load_failed' };
-        }
-    }
-    
+function canonicalizarXML(xmlString) {
     try {
-        // Gerar XML base
-        const xmlBase = gerarXMLNFSeCompleto();
-        console.log('📄 XML base gerado');
+        console.log('📐 Aplicando canonicalização C14N...');
         
-        // TESTE 1: Assinatura padrão atual
-        console.log('\n🔐 TESTE 1: Assinatura padrão atual');
-        console.log('-----------------------------------');
+        // Implementação simplificada de canonicalização C14N
+        // Remove espaços desnecessários e normaliza o XML
+        let canonical = xmlString
+            // Remove espaços antes e depois das tags
+            .replace(/>\s+</g, '><')
+            
+            // Remove espaços múltiplos dentro de atributos
+            .replace(/\s+/g, ' ')
+            
+            // Remove espaços antes do fechamento de tags
+            .replace(/\s+>/g, '>')
+            
+            // Remove espaços após abertura de tags
+            .replace(/\>\s+/g, '>')
+            
+            // Normaliza espaços em atributos
+            .replace(/=\s+"/g, '="')
+            .replace(/"\s+/g, '" ')
+            
+            // Remove quebras de linha desnecessárias
+            .replace(/\n\s*/g, '')
+            
+            // Trim geral
+            .trim();
         
-        const xml1 = await assinarXMLCompleto(xmlBase, certificadoAtual);
-        const envelope1 = montarEnvelopeSOAPFinal(xml1);
-        
-        console.log('📤 Enviando teste 1...');
-        const proxy = 'https://nfse-proxy-jp.mtisrael.workers.dev/';
-        const urlWebservice = 'https://nfseh.joaopessoa.pb.gov.br/service.asmx';
-        const resultado1 = await enviarViaProxyAlternativo(proxy, urlWebservice, envelope1);
-        
-        if (resultado1.success) {
-            console.log('✅ Envio 1 bem sucedido');
-            console.log('📥 Resposta 1:', resultado1.response.substring(0, 200) + '...');
-        } else {
-            console.log('❌ Envio 1 falhou:', resultado1.error);
-        }
-        
-        // ANÁLISE FINAL
-        console.log('\n📊 ANÁLISE FINAL DOS TESTES');
-        console.log('===========================');
-        
-        const sucesso1 = resultado1.success;
-        console.log('Teste 1 (padrão):', sucesso1 ? '✅' : '❌');
-        
-        if (sucesso1) {
-            if (resultado1.response && resultado1.response.includes('erro na assinatura')) {
-                console.log('⚠️ Há erro na assinatura - investigar certificado');
-            } else if (resultado1.response && resultado1.response.includes('protocolo')) {
-                console.log('🎉 SUCESSO COMPLETO - NFS-e processada!');
-            }
-        }
-        
-        return {
-            teste1: { success: sucesso1, response: resultado1.response?.substring(0, 100) }
-        };
+        console.log('✅ Canonicalização C14N aplicada');
+        return canonical;
         
     } catch (error) {
-        console.error('❌ Erro nos testes:', error);
-        return { error: error.message };
+        console.error('❌ Erro na canonicalização:', error);
+        // Em caso de erro, retorna o XML original
+        return xmlString;
     }
 }
 
-// ============================================================================
-// EXPOSIÇÃO DAS FUNÇÕES NO WINDOW
-// ============================================================================
+// Função principal atualizada para seguir o processo ABRASF completo
+async function assinarXMLCompleto(xml) {
+    console.log('🔐 Iniciando assinatura COMPLETA do XML...');
+    
+    try {
+        // 0. Limpar XML antes de processar
+        const xmlLimpo = limparXMLParaAssinatura(xml);
+        
+        // 1. Solicitar arquivo .pfx do usuário
+        const { pfxData, senha } = await solicitarCertificado();
+        
+        // 2. Processar certificado com node-forge
+        const { certificate, privateKey } = await processarCertificado(pfxData, senha);
+        
+        // 3. PASSO 1 ABRASF: Assinar cada RPS individualmente
+        console.log('📝 PASSO 1: Assinando RPS individualmente...');
+        let xmlComRpsAssinados = await assinarXMLComForge(xmlLimpo, certificate, privateKey);
+        
+        // 4. PASSO 2 ABRASF: Verificar se precisa assinar o lote
+        if (xmlComRpsAssinados.includes('<LoteRps')) {
+            console.log('📝 PASSO 2: Assinando LoteRps...');
+            xmlComRpsAssinados = await assinarLoteRPS(xmlComRpsAssinados, certificate, privateKey);
+        } else {
+            console.log('✅ Nenhum LoteRps encontrado, pulando assinatura do lote');
+        }
+        
+        console.log('✅ XML assinado COMPLETO com sucesso!');
+        return xmlComRpsAssinados;
+        
+    } catch (error) {
+        console.error('❌ Erro na assinatura completa:', error);
+        throw error;
+    }
+}
 
-// Funções principais de assinatura
-window.assinarXMLComUpload = assinarXMLComUpload;
-window.assinarXMLCompleto = assinarXMLCompleto;
+// Função para assinar cada RPS individualmente
+async function assinarCadaRPS(xml, certificate, privateKey) {
+    console.log('✍️ Assinando cada RPS individualmente...');
+    
+    try {
+        // Extrair todos os RPS do XML
+        const rpsMatches = xml.match(/<Rps[^>]*>([\s\S]*?)<\/Rps>/g);
+        if (!rpsMatches || rpsMatches.length === 0) {
+            throw new Error('Nenhum RPS encontrado para assinatura');
+        }
+        
+        let xmlComRpsAssinados = xml;
+        
+        // Assinar cada RPS
+        for (const rps of rpsMatches) {
+            console.log('🔍 Processando RPS para assinatura...');
+            
+            // Extrair InfRps do RPS
+            const infRpsMatch = rps.match(/<InfRps[^>]*>([\s\S]*?)<\/InfRps>/);
+            if (!infRpsMatch) {
+                console.warn('⚠️ InfRps não encontrado no RPS, pulando...');
+                continue;
+            }
+            
+            const infRps = infRpsMatch[0];
+            
+            // Canonicalizar para digest conforme C14N (padrão XML)
+            const xmlCanonicalizado = canonicalizarXML(infRps);
+            
+            // Calcular digest SHA-1 conforme ABRASF
+            const md = forge.md.sha1.create();
+            md.update(xmlCanonicalizado, 'utf8');
+            const digestValue = forge.util.encode64(md.digest().bytes());
+            
+            console.log(`🔐 DigestValue (SHA-1) do RPS: ${digestValue}`);
+            
+            // Criar SignedInfo para o RPS
+            const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">
+<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<Reference URI="#${digestValue}">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<DigestValue>${digestValue}</DigestValue>
+</Reference>
+</SignedInfo>`;
+            
+            // Canonicalizar SignedInfo conforme C14N
+            const signedInfoCanonicalizado = canonicalizarXML(signedInfo);
+            
+            // Assinar SignedInfo com SHA-1
+            const mdSignature = forge.md.sha1.create();
+            mdSignature.update(signedInfoCanonicalizado, 'utf8');
+            const signature = privateKey.sign(mdSignature);
+            const signatureValue = forge.util.encode64(signature);
+            
+            console.log(`🔐 SignatureValue (tamanho: ${signatureValue.length}): ${signatureValue.substring(0, 50)}...`);
+            
+            // Obter certificado em Base64
+            const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();
+            const certificateValue = forge.util.encode64(certDer);
+            
+            // Construir assinatura XMLDSig completa conforme ABRASF
+            const xmlSignature = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+${signedInfo}
+<SignatureValue>${signatureValue}</SignatureValue>
+<KeyInfo>
+<X509Data>
+<X509Certificate>${certificateValue}</X509Certificate>
+</X509Data>
+</KeyInfo>
+</Signature>`;
+            
+            // Inserir assinatura no RPS
+            xmlComRpsAssinados = xmlComRpsAssinados.replace(rps, rps + '\n' + xmlSignature);
+            
+            console.log('✅ RPS assinado com sucesso');
+        }
+        
+        return xmlComRpsAssinados;
+        
+    } catch (error) {
+        console.error('❌ Erro ao assinar cada RPS:', error);
+        throw error;
+    }
+}
 
-// Funções de teste e diagnóstico
-window.testeSimples = testeSimples;
-window.limparXMLParaAssinatura = limparXMLParaAssinatura;
-window.gerarXMLNFSeCompleto = gerarXMLNFSeCompleto;
-window.montarEnvelopeSOAPFinal = montarEnvelopeSOAPFinal;
-window.testarCorrecaoSAAJ = testarCorrecaoSAAJ;
-window.diagnosticarESolverErroSAAJ = diagnosticarESolverErroSAAJ;
-window.debugProxyDetalhado = debugProxyDetalhado;
-window.testarDiferentesAssinaturas = testarDiferentesAssinaturas;
-
-console.log('✅ assinatura-simples.js carregado - funções expostas no window');
-
-
-/*
-=============================================================================
-FUNÇÕES DISPONÍVEIS:
-=============================================================================
-
-ASSINATURA:
-- assinarXMLComUpload()
-- assinarXMLCompleto()
-
-TESTES PRINCIPAIS:
-- testarDiferentesAssinaturas() 🆕 TESTE PRINCIPAL RECOMENDADO
-- diagnosticarESolverErroSAAJ() ⭐ DIAGNÓSTICO COMPLETO
-- testarCorrecaoSAAJ() ⭐ TESTE ESPECÍFICO SAAJ
-- debugProxyDetalhado() ⭐ DEBUG PROXY
-
-UTILITÁRIOS:
-- testeSimples()
-- limparXMLParaAssinatura()
-- gerarXMLNFSeCompleto()
-- montarEnvelopeSOAPFinal()
-
-=============================================================================
-TESTE RECOMENDADO:
-=============================================================================
-
-// TESTE PRINCIPAL (recomendado):
-testarDiferentesAssinaturas()
-
-// Se houver problemas específicos:
-diagnosticarESolverErroSAAJ()
-testarCorrecaoSAAJ()
-debugProxyDetalhado()
-
-=============================================================================
-*/

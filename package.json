@@ -1,0 +1,14 @@
+{
+  "name": "notafiscal-sender",
+  "version": "1.0.0",
+  "description": "Node.js wrapper to run browser-based NFS-e sender",
+  "main": "run-envio.js",
+  "scripts": {
+    "start": "node run-envio.js"
+  },
+  "dependencies": {
+    "jsdom": "^24.0.0",
+    "node-fetch": "^2.7.0",
+    "xmldom": "^0.6.0"
+  }
+}

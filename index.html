@@ -420,5 +420,94 @@
   <script src="correcao-envio.js"></script>
   <script src="envio-direto.js"></script>
   <script src="script.js"></script>
+  
+  <!-- Script de teste CNPJ corrigido -->
+  <script>
+    async function testarCnpjCorrigido() {
+      const resultDiv = document.getElementById('resultadoTeste');
+      resultDiv.innerHTML = '🔄 Executando teste...';
+      
+      try {
+        // 1. Verificar certificado
+        const certInfo = obterInformacoesCertificado();
+        let log = `✅ CNPJ do certificado: ${certInfo.cnpj}\n`;
+        
+        // 2. Gerar XML com CNPJ correto  
+        const xmlCompleto = gerarXmlCompleto();
+        
+        // 3. Extrair CNPJs do XML
+        const cnpjRegex = /<Cnpj>(\d{14})<\/Cnpj>/g;
+        const cnpjs = [];
+        let match;
+        while ((match = cnpjRegex.exec(xmlCompleto)) !== null) {
+          if (!cnpjs.includes(match[1])) {
+            cnpjs.push(match[1]);
+          }
+        }
+        
+        log += `✅ CNPJs no XML: ${cnpjs.join(', ')}\n`;
+        log += `✅ CNPJ compatível: ${cnpjs.includes(certInfo.cnpj) ? 'SIM' : 'NÃO'}\n`;
+        
+        // 4. Assinar XML
+        log += `🔄 Assinando XML...\n`;
+        const xmlAssinado = await assinarXmlCompleto(xmlCompleto);
+        log += `✅ XML assinado com sucesso\n`;
+        log += `📊 Tamanho: ${xmlAssinado.length} caracteres\n`;
+        
+        // 5. Testar envio
+        log += `🚀 Enviando para webservice...\n`;
+        resultDiv.innerHTML = log.replace(/\n/g, '<br>');
+        
+        const resultado = await testarEnvioComXmlAssinado(xmlAssinado);
+        
+        if (resultado.success) {
+          log += `✅ Resposta recebida!\n`;
+          
+          if (resultado.response && resultado.response.data) {
+            const resposta = resultado.response.data;
+            if (resposta.includes('erro na assinatura')) {
+              log += `❌ AINDA HÁ ERRO DE ASSINATURA\n`;
+              log += `Detalhes: ${resposta.substring(0, 200)}...\n`;
+            } else if (resposta.includes('sucesso') || resposta.includes('protocolo')) {
+              log += `🎉 SUCESSO! XML ACEITO PELO WEBSERVICE!\n`;
+            } else {
+              log += `⚠️ Resposta diferente:\n${resposta.substring(0, 200)}...\n`;
+            }
+          }
+        } else {
+          log += `❌ Erro no envio: ${resultado.error}\n`;
+        }
+        
+        resultDiv.innerHTML = log.replace(/\n/g, '<br>');
+        
+      } catch (error) {
+        resultDiv.innerHTML = `❌ Erro no teste: ${error.message}`;
+        console.error('Erro completo:', error);
+      }
+    }
+    
+    async function testarEnvioComXmlAssinado(xmlAssinado) {
+      const soapEnvelope = `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" 
+               xmlns:tns="http://serem-hml.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap">
+    <soap:Header />
+    <soap:Body>
+        <tns:EnviarLoteRpsRequest>
+            <xml><![CDATA[${xmlAssinado}]]></xml>
+        </tns:EnviarLoteRpsRequest>
+    </soap:Body>
+</soap:Envelope>`;
+
+      return enviarViaProxyAlternativo({
+        endpoint: 'https://serem-hml.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap',
+        soapAction: 'EnviarLoteRps',
+        soapEnvelope: soapEnvelope,
+        headers: {
+          'Content-Type': 'text/xml; charset=utf-8',
+          'SOAPAction': 'EnviarLoteRps'
+        }
+      });
+    }
+  </script>
 </body>
 </html>
