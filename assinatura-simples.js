@@ -512,34 +512,22 @@ function limparXMLParaAssinatura(xml) {
 
 function canonicalizarXML(xmlString) {
     try {
-        console.log('📐 Aplicando canonicalização C14N...');
+        console.log('📐 Aplicando canonicalização C14N CONSERVADORA...');
         
-        // Implementação simplificada de canonicalização C14N
-        // Remove espaços desnecessários e normaliza o XML
+        // Implementação MUITO conservadora de canonicalização C14N
+        // Para webservices mais rigorosos como João Pessoa
         let canonical = xmlString
-            // Remove espaços antes e depois das tags
+            // Remove APENAS espaços antes e depois das tags (muito conservador)
             .replace(/>\s+</g, '><')
             
-            // Remove espaços múltiplos dentro de atributos
-            .replace(/\s+/g, ' ')
-            
-            // Remove espaços antes do fechamento de tags
-            .replace(/\s+>/g, '>')
-            
-            // Remove espaços após abertura de tags
-            .replace(/\>\s+/g, '>')
-            
-            // Normaliza espaços em atributos
-            .replace(/=\s+"/g, '="')
-            .replace(/"\s+/g, '" ')
-            
-            // Remove quebras de linha desnecessárias
+            // Remove quebras de linha desnecessárias (conservador)
             .replace(/\n\s*/g, '')
             
             // Trim geral
             .trim();
         
-        console.log('✅ Canonicalização C14N aplicada');
+        console.log('✅ Canonicalização C14N CONSERVADORA aplicada');
+        console.log('🔍 DEBUG: Canonicalização mais conservadora para compatibilidade máxima');
         return canonical;
         
     } catch (error) {

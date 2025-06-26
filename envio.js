@@ -794,16 +794,19 @@ function obterUrlWebservicePadrao() {
 
 // Criar envelope SOAP para envio conforme WSDL de João Pessoa
 function criarEnvelopeSOAP(xmlContent, versao = '2.03') {
-  // Envelope SOAP conforme WSDL - document/literal com namespace correto
-  // SOAPAction vazia conforme binding SOAP
+  // Envelope SOAP ULTRA-COMPATÍVEL conforme WSDL de João Pessoa
+  // Namespace exato conforme documentação ABRASF
   // CORRIGIDO: remover declaração XML duplicada do conteúdo
   const xmlSemDeclaracao = xmlContent.replace(/^<\?xml[^>]*\?>\s*/, '');
+  
+  console.log('📦 Criando envelope SOAP ULTRA-COMPATÍVEL para João Pessoa...');
+  
   return `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:nfse="http://nfse.abrasf.org.br">
   <soap:Body>
-    <RecepcionarLoteRps xmlns="http://nfse.abrasf.org.br">
+    <nfse:RecepcionarLoteRps>
       ${xmlSemDeclaracao}
-    </RecepcionarLoteRps>
+    </nfse:RecepcionarLoteRps>
   </soap:Body>
 </soap:Envelope>`;
 }
