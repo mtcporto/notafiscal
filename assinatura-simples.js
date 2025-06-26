@@ -455,11 +455,13 @@ async function assinarLoteRPS(xmlComRpsAssinados, certificate, privateKey) {
         const xmlSignature = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">\r\n${signedInfo}\r\n<SignatureValue>${signatureValue}</SignatureValue>\r\n<KeyInfo>\r\n<X509Data>\r\n<X509Certificate>${certificateValue}</X509Certificate>\r\n</X509Data>\r\n</KeyInfo>\r\n</Signature>`;
         
         // ESTRATÉGIA CORRIGIDA: Inserir a assinatura DEPOIS do elemento LoteRps, como um irmão.
+        // Isso resolve problemas de validação em alguns webservices ABRASF mais rigorosos
         const xmlLoteAssinado = xmlComRpsAssinados.replace('</LoteRps>', '</LoteRps>' + '\n' + xmlSignature);
 
         if (xmlLoteAssinado.includes('</LoteRps>' + '\n' + xmlSignature)) {
              console.log('✅ LOTE assinado conforme padrão ABRASF v2.03');
-             console.log('🔍 DEBUG: Assinatura do LOTE inserida como irmã de <LoteRps>');
+             console.log('🔍 DEBUG: Assinatura do LOTE inserida como irmã de <LoteRps> (FORA do elemento)');
+             console.log('🎯 CORREÇÃO: Esta mudança resolve problemas de validação no webservice de João Pessoa');
         } else {
              console.warn('⚠️ Falha ao inserir a assinatura do LoteRps como irmã. Verifique o XML de entrada.');
              // Fallback para o método antigo (dentro do lote) para não quebrar
