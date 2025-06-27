@@ -57,6 +57,72 @@ function canonicalizarXML(xmlString) {
 
 // Função principal para enviar XML para webservice
 async function enviarParaWebservice() {
+  console.log('📡 Função enviarParaWebservice chamada');
+  
+  // VERIFICAR SE É JOÃO PESSOA - USAR SISTEMA SIMPLIFICADO
+  const cidade = document.getElementById('prestadorCidade')?.value || 'João Pessoa';
+  if (cidade === 'João Pessoa' && typeof sistemaJoaoPessoa !== 'undefined') {
+    console.log('🎯 Detectado João Pessoa - usando sistema simplificado para envio');
+    
+    // Verificar se tem XML gerado
+    const xmlOutputElement = document.getElementById('xmlOutput');
+    if (!xmlOutputElement || !xmlOutputElement.textContent.trim()) {
+      alert('❌ Gere um XML primeiro antes de enviar.');
+      return;
+    }
+    
+    const xmlContent = xmlOutputElement.textContent;
+    
+    // Verificar se tem certificado configurado
+    const certConfig = localStorage.getItem('certificadoValidado');
+    if (!certConfig) {
+      alert('⚠️ Configure um certificado primeiro!');
+      return;
+    }
+    
+    try {
+      console.log('🔐 Assinando XML com sistema simplificado...');
+      
+      // Preparar configuração do certificado
+      const certData = JSON.parse(certConfig);
+      const certificadoConfig = {
+        pfxBytes: new Uint8Array(atob(certData.certificado).split('').map(c => c.charCodeAt(0))),
+        senha: certData.senha
+      };
+      
+      // Assinar XML
+      const xmlAssinado = await sistemaJoaoPessoa.assinarXML(xmlContent, certificadoConfig);
+      
+      console.log('📡 Enviando XML assinado...');
+      
+      // Enviar XML
+      const resultado = await sistemaJoaoPessoa.enviarXML(xmlAssinado);
+      
+      // Mostrar resultado na interface
+      const responseElement = document.getElementById('responseText');
+      if (responseElement) {
+        responseElement.textContent = resultado.resposta;
+      }
+      
+      // Mostrar XML assinado na aba XML
+      document.getElementById('xmlOutput').textContent = xmlAssinado;
+      
+      // Feedback para o usuário
+      if (resultado.sucesso) {
+        alert('🎉 Sucesso! NFS-e enviada e aceita pelo webservice!');
+      } else {
+        alert('❌ Erro no webservice: ' + resultado.resposta.substring(0, 200));
+      }
+      
+      return resultado;
+      
+    } catch (erro) {
+      console.error('❌ Erro no envio João Pessoa:', erro);
+      alert('❌ Erro no envio: ' + erro.message);
+      return;
+    }
+  }
+  
   const xmlOutputElement = document.getElementById('xmlOutput');
   
   if (!xmlOutputElement) {

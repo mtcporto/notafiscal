@@ -287,30 +287,44 @@ async function assinarXMLComForge(xml, certificate, privateKey) {
     console.log('✍️ Assinando XML com node-forge...');
     
     try {
-        // Extrair InfRps para assinatura
-        const infRpsMatch = xml.match(/<InfRps[^>]*Id="([^"]*)"[^>]*>([\s\S]*?)<\/InfRps>/);
-        if (!infRpsMatch) {
-            throw new Error('Tag InfRps com Id não encontrada');
+        // Detectar se é João Pessoa (InfDeclaracaoPrestacaoServico) ou ABRASF padrão (InfRps)
+        let elementMatch, elementId, elementCompleto, elementName;
+        
+        // Tentar InfDeclaracaoPrestacaoServico primeiro (João Pessoa)
+        elementMatch = xml.match(/<InfDeclaracaoPrestacaoServico[^>]*Id="([^"]*)"[^>]*>([\s\S]*?)<\/InfDeclaracaoPrestacaoServico>/);
+        if (elementMatch) {
+            elementId = elementMatch[1];
+            elementCompleto = elementMatch[0];
+            elementName = 'InfDeclaracaoPrestacaoServico';
+            console.log(`🎯 Detectado João Pessoa - Assinando ${elementName} com Id: ${elementId}`);
+        } else {
+            // Fallback para InfRps (ABRASF padrão)
+            elementMatch = xml.match(/<InfRps[^>]*Id="([^"]*)"[^>]*>([\s\S]*?)<\/InfRps>/);
+            if (elementMatch) {
+                elementId = elementMatch[1];
+                elementCompleto = elementMatch[0];
+                elementName = 'InfRps';
+                console.log(`🔍 Detectado ABRASF padrão - Assinando ${elementName} com Id: ${elementId}`);
+            } else {
+                throw new Error('Tag de assinatura não encontrada. Esperado: <InfRps> ou <InfDeclaracaoPrestacaoServico> com atributo Id');
+            }
         }
-        
-        const infRpsId = infRpsMatch[1];
-        const infRpsCompleto = infRpsMatch[0];
-        
-        console.log(`🔍 Assinando InfRps com Id: ${infRpsId}`);
-          // Canonicalizar para digest conforme C14N (padrão XML)
-        const xmlCanonicalizado = canonicalizarXML(infRpsCompleto);
+        // Canonicalizar para digest conforme C14N (padrão XML)
+        const xmlCanonicalizado = canonicalizarXML(elementCompleto);
         
         // Calcular digest SHA-1 conforme ABRASF
         const md = forge.md.sha1.create();
         md.update(xmlCanonicalizado, 'utf8');
         const digestValue = forge.util.encode64(md.digest().bytes());
-          console.log(`🔐 XML canonicalizado (tamanho: ${xmlCanonicalizado.length}):`, xmlCanonicalizado.substring(0, 300) + (xmlCanonicalizado.length > 300 ? '...' : ''));
+        
+        console.log(`🔐 XML canonicalizado (tamanho: ${xmlCanonicalizado.length}):`, xmlCanonicalizado.substring(0, 300) + (xmlCanonicalizado.length > 300 ? '...' : ''));
         console.log(`🔐 DigestValue (SHA-1): ${digestValue}`);
-          // Criar SignedInfo FORMATADO como NFe que funciona em João Pessoa (com quebras de linha)
+        
+        // Criar SignedInfo FORMATADO como NFe que funciona em João Pessoa (com quebras de linha)
         const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">
 <CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
 <SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
-<Reference URI="#${infRpsId}">
+<Reference URI="#${elementId}">
 <Transforms>
 <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
 <Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
@@ -347,23 +361,39 @@ ${signedInfo}
         // A assinatura vai no FINAL do elemento Rps (após todos os elementos, antes do fechamento)
         let xmlAssinado = xml;
         
-        // Procurar o fechamento do RPS que contém este InfRps
-        const rpsPattern = new RegExp(`(<Rps[^>]*>[\\s\\S]*?<InfRps[^>]*Id="${infRpsId}"[^>]*>[\\s\\S]*?</InfRps>)([\\s\\S]*?)(</Rps>)`, 'i');
-        const rpsMatch = xmlAssinado.match(rpsPattern);
-        
-        if (rpsMatch) {
-            // Inserir assinatura ANTES do fechamento do Rps (posição padrão ABRASF)
-            xmlAssinado = xmlAssinado.replace(rpsMatch[0], rpsMatch[1] + rpsMatch[2] + '\n' + xmlSignature + '\n' + rpsMatch[3]);
-            console.log('✅ Assinatura inserida no FINAL do Rps (posição padrão ABRASF)');
+        if (elementName === 'InfDeclaracaoPrestacaoServico') {
+            // João Pessoa: Procurar o fechamento do RPS que contém este InfDeclaracaoPrestacaoServico
+            const rpsPattern = new RegExp(`(<Rps[^>]*>[\\s\\S]*?<InfDeclaracaoPrestacaoServico[^>]*Id="${elementId}"[^>]*>[\\s\\S]*?</InfDeclaracaoPrestacaoServico>)([\\s\\S]*?)(</Rps>)`, 'i');
+            const rpsMatch = xmlAssinado.match(rpsPattern);
+            
+            if (rpsMatch) {
+                // Inserir assinatura ANTES do fechamento do Rps (posição padrão ABRASF)
+                xmlAssinado = xmlAssinado.replace(rpsMatch[0], rpsMatch[1] + rpsMatch[2] + '\n' + xmlSignature + '\n' + rpsMatch[3]);
+                console.log('✅ Assinatura inserida no FINAL do Rps (João Pessoa - InfDeclaracaoPrestacaoServico)');
+            } else {
+                // Fallback: inserir dentro do InfDeclaracaoPrestacaoServico
+                xmlAssinado = xml.replace('</InfDeclaracaoPrestacaoServico>', '\n' + xmlSignature + '\n</InfDeclaracaoPrestacaoServico>');
+                console.log('⚠️ Fallback: Assinatura inserida dentro do InfDeclaracaoPrestacaoServico');
+            }
         } else {
-            // Fallback: inserir dentro do InfRps
-            xmlAssinado = xml.replace('</InfRps>', '\n' + xmlSignature + '\n</InfRps>');
-            console.log('⚠️ Fallback: Assinatura inserida dentro do InfRps');
+            // ABRASF padrão: Procurar o fechamento do RPS que contém este InfRps
+            const rpsPattern = new RegExp(`(<Rps[^>]*>[\\s\\S]*?<InfRps[^>]*Id="${elementId}"[^>]*>[\\s\\S]*?</InfRps>)([\\s\\S]*?)(</Rps>)`, 'i');
+            const rpsMatch = xmlAssinado.match(rpsPattern);
+            
+            if (rpsMatch) {
+                // Inserir assinatura ANTES do fechamento do Rps (posição padrão ABRASF)
+                xmlAssinado = xmlAssinado.replace(rpsMatch[0], rpsMatch[1] + rpsMatch[2] + '\n' + xmlSignature + '\n' + rpsMatch[3]);
+                console.log('✅ Assinatura inserida no FINAL do Rps (ABRASF padrão - InfRps)');
+            } else {
+                // Fallback: inserir dentro do InfRps
+                xmlAssinado = xml.replace('</InfRps>', '\n' + xmlSignature + '\n</InfRps>');
+                console.log('⚠️ Fallback: Assinatura inserida dentro do InfRps');
+            }
         }
-          console.log('✅ Assinatura XMLDSig criada conforme padrão ABRASF v2.03');
-        console.log('🔍 DEBUG: Posição da assinatura - DENTRO do Rps, APÓS InfRps');
+        console.log('✅ Assinatura XMLDSig criada conforme padrão ABRASF v2.03');
+        console.log('🔍 DEBUG: Posição da assinatura - DENTRO do Rps, APÓS', elementName);
         console.log('🔍 DEBUG: Algoritmos utilizados - SHA-1 (digest e signature)');
-        console.log('🔍 DEBUG: Reference URI aponta para:', `#${infRpsId}`);
+        console.log('🔍 DEBUG: Reference URI aponta para:', `#${elementId}`);
         console.log('🔍 DEBUG: Namespace XMLDSig:', 'http://www.w3.org/2000/09/xmldsig#');
         
         // Validação adicional da assinatura inserida

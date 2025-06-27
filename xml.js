@@ -15,7 +15,43 @@
 function gerarXML() {
   console.log('🚀 Função gerarXML chamada'); // Debug
   
-  // Verificar se a função de validação existe
+  // VERIFICAR SE É JOÃO PESSOA - USAR SISTEMA SIMPLIFICADO
+  const cidade = document.getElementById('prestadorCidade')?.value || 'João Pessoa';
+  if (cidade === 'João Pessoa' && typeof sistemaJoaoPessoa !== 'undefined') {
+    console.log('🎯 Detectado João Pessoa - usando sistema simplificado');
+    
+    // Coletar dados do formulário
+    const dadosFormulario = {
+      prestador: {
+        cnpj: document.getElementById('cnpjPrestador').value || '12345678000123',
+        inscricaoMunicipal: document.getElementById('imPrestador').value || '123456'
+      },
+      tomador: {
+        tipoDoc: document.getElementById('tipoDocTomador').value || 'cnpj',
+        documento: document.getElementById('docTomador').value || '98765432000198',
+        razaoSocial: document.getElementById('razaoTomador').value || 'EMPRESA TOMADORA LTDA'
+      },
+      servico: {
+        valorServicos: document.getElementById('valor').value || '100.00',
+        itemListaServico: document.getElementById('itemServico').value || '1401',
+        discriminacao: document.getElementById('descricao').value || 'SERVICOS DE TESTE'
+      }
+    };
+    
+    // Gerar XML usando sistema simplificado
+    const xml = sistemaJoaoPessoa.gerarXML(dadosFormulario);
+    
+    // Mostrar XML na interface
+    document.getElementById('xmlOutput').textContent = xml;
+    document.getElementById('xmlContainer').style.display = 'block';
+    document.getElementById('btnGerarXML').textContent = 'XML Gerado ✓';
+    document.getElementById('btnGerarXML').style.backgroundColor = '#28a745';
+    
+    console.log('✅ XML João Pessoa gerado com sistema simplificado');
+    return xml;
+  }
+  
+  // Verificar se a função de validação existe (para outros municípios)
   if (typeof validarFormulario !== 'function') {
     console.error('❌ Função validarFormulario não encontrada');
     alert('Erro: Função de validação não carregada. Verifique se todos os módulos foram carregados.');
