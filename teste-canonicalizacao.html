@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de Canonicalização</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .result { background: white; margin: 10px 0; padding: 15px; border-radius: 5px; border-left: 4px solid #007bff; }
+        .xml-content { background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; overflow-x: auto; }
+        .hash { background: #e9ecef; padding: 8px; margin: 5px 0; border-radius: 3px; font-family: monospace; }
+        .btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        .btn:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Teste de Canonicalização para João Pessoa</h1>
+        
+        <button class="btn" onclick="executarTeste()">Executar Teste de Canonicalização</button>
+        
+        <div id="resultados"></div>
+    </div>
+
+    <script src="./teste-canonicalizacao-alternativa.js"></script>
+    
+    <script>
+        function executarTeste() {
+            const resultadosDiv = document.getElementById('resultados');
+            resultadosDiv.innerHTML = '<div style="color: #007bff;">🔄 Executando testes...</div>';
+            
+            setTimeout(() => {
+                const xmlTeste = `<LoteRps Id="lote123" versao="2.03">
+<NumeroLote>123</NumeroLote>
+<CpfCnpj>
+<Cnpj>15198135000180</Cnpj>
+</CpfCnpj>
+<InscricaoMunicipal>122781-5</InscricaoMunicipal>
+</LoteRps>`;
+
+                const resultados = testarCanonizacoes();
+                
+                let html = `
+                    <div class="result">
+                        <h3>📄 XML Original (${xmlTeste.length} chars)</h3>
+                        <div class="xml-content">${xmlTeste}</div>
+                    </div>
+                `;
+                
+                for (const [nome, xml] of Object.entries(resultados)) {
+                    if (nome !== 'original') {
+                        html += `
+                            <div class="result">
+                                <h3>🔄 ${nome.charAt(0).toUpperCase() + nome.slice(1)} (${xml.length} chars)</h3>
+                                <div class="xml-content">${xml}</div>
+                                <div class="hash" id="hash-${nome}">Calculando hash...</div>
+                            </div>
+                        `;
+                    }
+                }
+                
+                resultadosDiv.innerHTML = html;
+                
+                // Calcular hashes
+                calcularHashes(resultados);
+            }, 100);
+        }
+        
+        async function calcularHashes(resultados) {
+            const encoder = new TextEncoder();
+            
+            for (const [nome, xml] of Object.entries(resultados)) {
+                if (nome !== 'original') {
+                    try {
+                        const data = encoder.encode(xml);
+                        const hashBuffer = await crypto.subtle.digest('SHA-1', data);
+                        const hashArray = Array.from(new Uint8Array(hashBuffer));
+                        const hashBase64 = btoa(String.fromCharCode.apply(null, hashArray));
+                        
+                        const hashDiv = document.getElementById(`hash-${nome}`);
+                        if (hashDiv) {
+                            hashDiv.innerHTML = `🔐 SHA-1: ${hashBase64}`;
+                        }
+                    } catch (error) {
+                        console.error(`Erro ao calcular hash para ${nome}:`, error);
+                        const hashDiv = document.getElementById(`hash-${nome}`);
+                        if (hashDiv) {
+                            hashDiv.innerHTML = `❌ Erro: ${error.message}`;
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

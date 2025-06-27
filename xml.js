@@ -137,11 +137,48 @@ function coletarDadosFormulario() {
 
 // Construir o XML completo da NFS-e conforme ABRASF v2.03
 function construirXMLNFSe(dados, valorServico, valorIss, valorLiquido, numeroRps, serieRps) {
+  // Detectar se é João Pessoa pelos dados do prestador ou configuração
+  const isJoaoPessoa = detectarJoaoPessoa(dados);
+  
+  if (isJoaoPessoa) {
+    console.log('🎯 Detectado João Pessoa - usando modelo oficial específico');
+    return construirXMLJoaoPessoa(dados, valorServico, valorIss, valorLiquido, numeroRps, serieRps);
+  } else {
+    console.log('🎯 Usando modelo ABRASF padrão');
+    return construirXMLABRASFPadrao(dados, valorServico, valorIss, valorLiquido, numeroRps, serieRps);
+  }
+}
+
+// Função para detectar se deve usar o modelo João Pessoa
+function detectarJoaoPessoa(dados) {
+  // Verificar por CNPJ conhecido (Pixel Vivo)
+  if (dados.prestador.cnpj === '15198135000180') {
+    return true;
+  }
+  
+  // Verificar por inscrição municipal de João Pessoa
+  if (dados.prestador.inscricaoMunicipal && dados.prestador.inscricaoMunicipal.includes('122781')) {
+    return true;
+  }
+  
+  // Verificar configuração manual
+  const config = JSON.parse(localStorage.getItem('nfseConfig') || '{}');
+  if (config.cidade === 'joao-pessoa' || config.modelo === 'joao-pessoa') {
+    return true;
+  }
+  
+  return false;
+}
+
+// Não há função duplicada aqui
+// Construir o XML ABRASF padrão (mantido para outras cidades)
+function construirXMLABRASFPadrao(dados, valorServico, valorIss, valorLiquido, numeroRps, serieRps) {
   // Data/hora atual no formato correto
   const agora = new Date();
   const dataEmissao = agora.toISOString().split('T')[0]; // AAAA-MM-DD
   const dataHoraEmissao = agora.toISOString().replace(/\.\d{3}Z$/, ''); // AAAA-MM-DDTHH:mm:ss
-    return `<EnviarLoteRpsEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
+  
+  return `<EnviarLoteRpsEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
   <LoteRps Id="lote${numeroRps.toString().padStart(3, '0')}" versao="2.03">
     <NumeroLote>${numeroRps}</NumeroLote>
     <Cnpj>${dados.prestador.cnpj}</Cnpj>
@@ -219,6 +256,95 @@ function construirXMLNFSe(dados, valorServico, valorIss, valorLiquido, numeroRps
     </ListaRps>
   </LoteRps>
 </EnviarLoteRpsEnvio>`;
+}
+
+// Construir o XML específico para João Pessoa conforme modelo oficial
+function construirXMLJoaoPessoa(dados, valorServico, valorIss, valorLiquido, numeroRps, serieRps) {
+  console.log('🏗️ Construindo XML específico para João Pessoa (MODELO OFICIAL)');
+  
+  // Data/hora atual no formato correto
+  const agora = new Date();
+  const dataEmissao = agora.toISOString().split('T')[0]; // AAAA-MM-DD
+  const competencia = dataEmissao.substring(0, 7) + '-01'; // Primeiro dia do mês
+  
+  console.log('📋 Dados para geração:', {
+    prestador: dados.prestador.cnpj,
+    tomador: dados.tomador.documento,
+    valor: valorServico,
+    numero: numeroRps,
+    serie: serieRps
+  });
+  
+  // ⚠️ ESTRUTURA EXATA CONFORME MODELO OFICIAL JOÃO PESSOA
+  // ✅ Elemento raiz <RecepcionarLoteRps>
+  // ✅ Estrutura <InfDeclaracaoPrestacaoServico> (não InfRps)
+  // ✅ Apenas 1 assinatura (LoteRps)
+  // ✅ Estrutura <CpfCnpj><Cnpj> correta
+  
+  return `<RecepcionarLoteRps>
+<EnviarLoteRpsEnvio>
+<LoteRps Id="lote${numeroRps}" versao="2.03">
+<NumeroLote>${numeroRps}</NumeroLote>
+<CpfCnpj>
+<Cnpj>${dados.prestador.cnpj}</Cnpj>
+</CpfCnpj>
+<InscricaoMunicipal>${dados.prestador.inscricaoMunicipal}</InscricaoMunicipal>
+<QuantidadeRps>1</QuantidadeRps>
+<ListaRps>
+<Rps>
+<InfDeclaracaoPrestacaoServico Id="rps${numeroRps}">
+<Rps Id="">
+<IdentificacaoRps>
+<Numero>${numeroRps}</Numero>
+<Serie>${serieRps}</Serie>
+<Tipo>1</Tipo>
+</IdentificacaoRps>
+<DataEmissao>${dataEmissao}</DataEmissao>
+<Status>1</Status>
+</Rps>
+<Competencia>${competencia}</Competencia>
+<Servico>
+<Valores>
+<ValorServicos>${valorServico.toFixed(2)}</ValorServicos>
+</Valores>
+<IssRetido>${dados.servico.issRetido || '2'}</IssRetido>
+<ItemListaServico>${dados.servico.itemListaServico}</ItemListaServico>
+<CodigoCnae>${dados.servico.codigoCnae || '6201500'}</CodigoCnae>
+<Discriminacao>${dados.servico.descricao}</Discriminacao>
+<CodigoMunicipio>2211001</CodigoMunicipio>
+<ExigibilidadeISS>${dados.servico.exigibilidadeIss || '1'}</ExigibilidadeISS>
+<MunicipioIncidencia>2211001</MunicipioIncidencia>
+</Servico>
+<Prestador>
+<CpfCnpj>
+<Cnpj>${dados.prestador.cnpj}</Cnpj>
+</CpfCnpj>
+<InscricaoMunicipal>${dados.prestador.inscricaoMunicipal}</InscricaoMunicipal>
+</Prestador>
+<Tomador>
+<IdentificacaoTomador>
+<CpfCnpj>
+${dados.tomador.tipoDoc === 'cpf' ? `<Cpf>${dados.tomador.documento}</Cpf>` : `<Cnpj>${dados.tomador.documento}</Cnpj>`}
+</CpfCnpj>
+</IdentificacaoTomador>
+<RazaoSocial>${dados.tomador.razaoSocial}</RazaoSocial>
+<Endereco>
+<Endereco>${dados.tomador.endereco?.logradouro || 'RUA TESTE'}</Endereco>
+<Numero>${dados.tomador.endereco?.numero || '123'}</Numero>
+<Bairro>${dados.tomador.endereco?.bairro || 'CENTRO'}</Bairro>
+<CodigoMunicipio>2211001</CodigoMunicipio>
+<Uf>PB</Uf>
+<Cep>${dados.tomador.endereco?.cep || '58000000'}</Cep>
+</Endereco>
+</Tomador>
+<OptanteSimplesNacional>${dados.prestador.simplesNacional || '2'}</OptanteSimplesNacional>
+<IncentivoFiscal>${dados.prestador.incentivoCultural || '2'}</IncentivoFiscal>
+</InfDeclaracaoPrestacaoServico>
+</Rps>
+</ListaRps>
+</LoteRps>
+</EnviarLoteRpsEnvio>
+</RecepcionarLoteRps>`;
 }
 
 // ==================== CONTROLE DE INTERFACE ====================
@@ -353,37 +479,34 @@ function validarXMLOffline() {
       '<i class="fas fa-check-circle" style="color: #27ae60;"></i>' : 
       '<i class="fas fa-times-circle" style="color: #e74c3c;"></i>';
     
-    htmlValidacao += `
-      <div class="validation-item">
-        <span class="validation-icon">${icon}</span>
-        <div>
-          <strong>${validacao.nome}</strong><br>
-          <small>${validacao.detalhes}</small>
-          ${validacao.erros && validacao.erros.length > 0 ? 
-            `<ul style="margin-top: 5px; color: #e74c3c; font-size: 12px;">
-              ${validacao.erros.map(erro => `<li>${erro}</li>`).join('')}
-            </ul>` : ''
-          }
-        </div>
-      </div>
-    `;
+    htmlValidacao += "<div class=\"validation-item\">" +
+      "<span class=\"validation-icon\">" + icon + "</span>" +
+      "<div>" +
+      "<strong>" + validacao.nome + "</strong><br>" +
+      "<small>" + validacao.detalhes + "</small>";
+    
+    if (validacao.erros && validacao.erros.length > 0) {
+      htmlValidacao += "<ul style=\"margin-top: 5px; color: #e74c3c; font-size: 12px;\">";
+      validacao.erros.forEach(erro => {
+        htmlValidacao += "<li>" + erro + "</li>";
+      });
+      htmlValidacao += "</ul>";
+    }
+    
+    htmlValidacao += "</div></div>";
   });
   
   // Resultado geral
   if (todosValidos) {
-    htmlValidacao += `
-      <div class="validation-summary success">
-        <i class="fas fa-thumbs-up"></i>
-        <strong>XML aprovado!</strong> Conforme padrão ABRASF v2.03 e pronto para envio.
-      </div>
-    `;
+    htmlValidacao += "<div class=\"validation-summary success\">" +
+      "<i class=\"fas fa-thumbs-up\"></i>" +
+      "<strong>XML aprovado!</strong> Conforme padrão ABRASF v2.03 e pronto para envio." +
+      "</div>";
   } else {
-    htmlValidacao += `
-      <div class="validation-summary error">
-        <i class="fas fa-exclamation-triangle"></i>
-        <strong>Correções necessárias!</strong> Ajuste os itens marcados em vermelho.
-      </div>
-    `;
+    htmlValidacao += "<div class=\"validation-summary error\">" +
+      "<i class=\"fas fa-exclamation-triangle\"></i>" +
+      "<strong>Correções necessárias!</strong> Ajuste os itens marcados em vermelho." +
+      "</div>";
   }
   
   htmlValidacao += '</div>';
@@ -417,7 +540,7 @@ function validarElementosObrigatorios(xml) {
     'Numero', 'Serie', 'ValorServicos', 'ItemListaServico'
   ];
   
-  return elementosObrigatorios.every(elemento => xml.includes(`<${elemento}>`));
+  return elementosObrigatorios.every(elemento => xml.includes("<" + elemento + ">"));
 }
 
 // Validar formato de valores
@@ -579,60 +702,61 @@ window.extrairDadosDoXML = extrairDadosDoXML;
 function construirXMLEndereco(endereco) {
   if (!endereco) return '';
   
-  return `
-    <Endereco>
-      ${endereco.logradouro ? `<Endereco>${endereco.logradouro}</Endereco>` : ''}
-      ${endereco.numero ? `<Numero>${endereco.numero}</Numero>` : ''}
-      ${endereco.complemento ? `<Complemento>${endereco.complemento}</Complemento>` : ''}
-      ${endereco.bairro ? `<Bairro>${endereco.bairro}</Bairro>` : ''}
-      ${endereco.codigoMunicipio ? `<CodigoMunicipio>${endereco.codigoMunicipio}</CodigoMunicipio>` : ''}
-      ${endereco.uf ? `<Uf>${endereco.uf}</Uf>` : ''}
-      ${endereco.codigoPais ? `<CodigoPais>${endereco.codigoPais}</CodigoPais>` : ''}
-      ${endereco.cep ? `<Cep>${endereco.cep.replace(/\D/g, '')}</Cep>` : ''}
-    </Endereco>`;
+  let xml = '<Endereco>';
+  if (endereco.logradouro) xml += '<Endereco>' + endereco.logradouro + '</Endereco>';
+  if (endereco.numero) xml += '<Numero>' + endereco.numero + '</Numero>';
+  if (endereco.complemento) xml += '<Complemento>' + endereco.complemento + '</Complemento>';
+  if (endereco.bairro) xml += '<Bairro>' + endereco.bairro + '</Bairro>';
+  if (endereco.codigoMunicipio) xml += '<CodigoMunicipio>' + endereco.codigoMunicipio + '</CodigoMunicipio>';
+  if (endereco.uf) xml += '<Uf>' + endereco.uf + '</Uf>';
+  if (endereco.codigoPais) xml += '<CodigoPais>' + endereco.codigoPais + '</CodigoPais>';
+  if (endereco.cep) xml += '<Cep>' + endereco.cep.replace(/\D/g, '') + '</Cep>';
+  xml += '</Endereco>';
+  return xml;
 }
 
 // Construir XML de contato conforme padrão ABRASF
 function construirXMLContato(contato) {
   if (!contato.email && !contato.telefone) return '';
   
-  return `
-    <Contato>
-      ${contato.telefone ? `<Telefone>${contato.telefone}</Telefone>` : ''}
-      ${contato.email ? `<Email>${contato.email}</Email>` : ''}
-    </Contato>`;
+  let xml = '<Contato>';
+  if (contato.telefone) xml += '<Telefone>' + contato.telefone + '</Telefone>';
+  if (contato.email) xml += '<Email>' + contato.email + '</Email>';
+  xml += '</Contato>';
+  return xml;
 }
 
 // Construir XML de intermediário conforme padrão ABRASF
 function construirXMLIntermediario(intermediario) {
   if (!intermediario) return '';
   
-  return `
-    <Intermediario>
-      <IdentificacaoIntermediario>
-        <CpfCnpj>
-          ${intermediario.tipoDoc === 'cpf' ? 
-            `<Cpf>${intermediario.documento}</Cpf>` : 
-            `<Cnpj>${intermediario.documento}</Cnpj>`
-          }
-        </CpfCnpj>
-        ${intermediario.inscricaoMunicipal ? `<InscricaoMunicipal>${intermediario.inscricaoMunicipal}</InscricaoMunicipal>` : ''}
-      </IdentificacaoIntermediario>
-      <RazaoSocial>${intermediario.razaoSocial}</RazaoSocial>
-      ${intermediario.endereco ? construirXMLEndereco(intermediario.endereco) : ''}
-      ${intermediario.email || intermediario.telefone ? construirXMLContato(intermediario) : ''}
-    </Intermediario>`;
+  let xml = '<Intermediario><IdentificacaoIntermediario><CpfCnpj>';
+  if (intermediario.tipoDoc === 'cpf') {
+    xml += '<Cpf>' + intermediario.documento + '</Cpf>';
+  } else {
+    xml += '<Cnpj>' + intermediario.documento + '</Cnpj>';
+  }
+  xml += '</CpfCnpj>';
+  if (intermediario.inscricaoMunicipal) {
+    xml += '<InscricaoMunicipal>' + intermediario.inscricaoMunicipal + '</InscricaoMunicipal>';
+  }
+  xml += '</IdentificacaoIntermediario>';
+  xml += '<RazaoSocial>' + intermediario.razaoSocial + '</RazaoSocial>';
+  if (intermediario.endereco) xml += construirXMLEndereco(intermediario.endereco);
+  if (intermediario.email || intermediario.telefone) xml += construirXMLContato(intermediario);
+  xml += '</Intermediario>';
+  return xml;
 }
 
 // Construir XML de construção civil conforme padrão ABRASF
 function construirXMLConstrucaoCivil(construcao) {
   if (!construcao) return '';
   
-  return `
-    <ConstrucaoCivil>
-      ${construcao.codigoObra ? `<CodigoObra>${construcao.codigoObra}</CodigoObra>` : ''}
-      ${construcao.art ? `<Art>${construcao.art}</Art>` : ''}
-    </ConstrucaoCivil>`;
+  let xml = '<ConstrucaoCivil>';
+  if (construcao.codigoObra) xml += '<CodigoObra>' + construcao.codigoObra + '</CodigoObra>';
+  if (construcao.art) xml += '<Art>' + construcao.art + '</Art>';
+  xml += '</ConstrucaoCivil>';
+  return xml;
 }
 
 // Validar XML conforme Schema ABRASF

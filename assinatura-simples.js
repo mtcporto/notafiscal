@@ -306,7 +306,7 @@ async function assinarXMLComForge(xml, certificate, privateKey) {
         const digestValue = forge.util.encode64(md.digest().bytes());
           console.log(`🔐 XML canonicalizado (tamanho: ${xmlCanonicalizado.length}):`, xmlCanonicalizado.substring(0, 300) + (xmlCanonicalizado.length > 300 ? '...' : ''));
         console.log(`🔐 DigestValue (SHA-1): ${digestValue}`);
-          // Criar SignedInfo conforme padrão ABRASF (com formatação específica)
+          // Criar SignedInfo FORMATADO como NFe que funciona em João Pessoa (com quebras de linha)
         const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">
 <CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
 <SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
@@ -333,7 +333,7 @@ async function assinarXMLComForge(xml, certificate, privateKey) {
         // Obter certificado em Base64
         const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();
         const certificateValue = forge.util.encode64(certDer);
-          // Construir assinatura XMLDSig completa conforme ABRASF
+          // Construir assinatura XMLDSig FORMATADA como NFe (com quebras de linha)
         const xmlSignature = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
 ${signedInfo}
 <SignatureValue>${signatureValue}</SignatureValue>
@@ -434,8 +434,19 @@ async function assinarLoteRPS(xmlComRpsAssinados, certificate, privateKey) {
         console.log(`🔐 XML LOTE canonicalizado (tamanho: ${xmlCanonicalizado.length}):`, xmlCanonicalizado.substring(0, 300) + (xmlCanonicalizado.length > 300 ? '...' : ''));
         console.log(`🔐 DigestValue do LOTE (SHA-1): ${digestValue}`);
         
-        // Criar SignedInfo para o lote
-        const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">\r\n<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>\r\n<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>\r\n<Reference URI="#${loteRpsId}">\r\n<Transforms>\r\n<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>\r\n<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>\r\n</Transforms>\r\n<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>\r\n<DigestValue>${digestValue}</DigestValue>\r\n</Reference>\r\n</SignedInfo>`;
+        // Criar SignedInfo para o lote FORMATADO como NFe (com quebras de linha)
+        const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">
+<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<Reference URI="#${loteRpsId}">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<DigestValue>${digestValue}</DigestValue>
+</Reference>
+</SignedInfo>`;
         
         // Canonicalizar e assinar SignedInfo conforme C14N
         const signedInfoCanonicalizado = canonicalizarXML(signedInfo);
@@ -451,8 +462,16 @@ async function assinarLoteRPS(xmlComRpsAssinados, certificate, privateKey) {
         const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();
         const certificateValue = forge.util.encode64(certDer);
         
-        // Construir assinatura do lote
-        const xmlSignature = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">\r\n${signedInfo}\r\n<SignatureValue>${signatureValue}</SignatureValue>\r\n<KeyInfo>\r\n<X509Data>\r\n<X509Certificate>${certificateValue}</X509Certificate>\r\n</X509Data>\r\n</KeyInfo>\r\n</Signature>`;
+        // Construir assinatura do lote FORMATADA como NFe (com quebras de linha)
+        const xmlSignature = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+${signedInfo}
+<SignatureValue>${signatureValue}</SignatureValue>
+<KeyInfo>
+<X509Data>
+<X509Certificate>${certificateValue}</X509Certificate>
+</X509Data>
+</KeyInfo>
+</Signature>`;
         
         // ESTRATÉGIA CORRIGIDA: Inserir a assinatura DEPOIS do elemento LoteRps, como um irmão.
         // Isso resolve problemas de validação em alguns webservices ABRASF mais rigorosos
@@ -512,22 +531,36 @@ function limparXMLParaAssinatura(xml) {
 
 function canonicalizarXML(xmlString) {
     try {
-        console.log('📐 Aplicando canonicalização C14N CONSERVADORA...');
+        console.log('📐 Aplicando canonicalização C14N específica para João Pessoa...');
         
-        // Implementação MUITO conservadora de canonicalização C14N
-        // Para webservices mais rigorosos como João Pessoa
+        // Canonicalização ESPECÍFICA para resolver problemas com João Pessoa
+        // Base nos erros mais comuns reportados pelos webservices ABRASF
         let canonical = xmlString
-            // Remove APENAS espaços antes e depois das tags (muito conservador)
-            .replace(/>\s+</g, '><')
+            // 1. CRÍTICO: Remover TODOS os \r\n que quebram a validação de hash
+            .replace(/\r\n/g, '')
+            .replace(/\r/g, '')
             
-            // Remove quebras de linha desnecessárias (conservador)
+            // 2. Remover quebras de linha e normalizar para formato compacto
             .replace(/\n\s*/g, '')
             
-            // Trim geral
+            // 3. Remover espaços múltiplos entre tags
+            .replace(/>\s+</g, '><')
+            
+            // 4. Normalizar espaços em atributos
+            .replace(/\s*=\s*/g, '=')
+            .replace(/="\s+/g, '="')
+            .replace(/\s+"/g, '"')
+            
+            // 5. Remover espaços antes de fechamentos de tag
+            .replace(/\s*\/>/g, '/>')
+            .replace(/\s*>/g, '>')
+            
+            // 6. Trim final
             .trim();
         
-        console.log('✅ Canonicalização C14N CONSERVADORA aplicada');
-        console.log('🔍 DEBUG: Canonicalização mais conservadora para compatibilidade máxima');
+        console.log('✅ Canonicalização específica para João Pessoa aplicada');
+        console.log('🔍 DEBUG: Removidos todos \\r\\n e normalizado espaçamento');
+        console.log('🎯 FOCO: Corrigido para compatibilidade máxima com webservice João Pessoa');
         return canonical;
         
     } catch (error) {
@@ -538,18 +571,29 @@ function canonicalizarXML(xmlString) {
 }
 
 // Função principal atualizada para seguir o processo ABRASF completo
-async function assinarXMLCompleto(xml) {
+async function assinarXMLCompleto(xml, certificadoConfig = null) {
     console.log('🔐 Iniciando assinatura COMPLETA do XML...');
     
     try {
         // 0. Limpar XML antes de processar
         const xmlLimpo = limparXMLParaAssinatura(xml);
         
-        // 1. Solicitar arquivo .pfx do usuário
-        const { pfxData, senha } = await solicitarCertificado();
+        let certificate, privateKey;
         
-        // 2. Processar certificado com node-forge
-        const { certificate, privateKey } = await processarCertificado(pfxData, senha);
+        if (certificadoConfig && certificadoConfig.dados && certificadoConfig.senha) {
+            // Usar certificado já configurado
+            console.log('🔐 Usando certificado já configurado...');
+            const resultado = await processarCertificado(certificadoConfig.dados, certificadoConfig.senha);
+            certificate = resultado.certificate;
+            privateKey = resultado.privateKey;
+        } else {
+            // Solicitar certificado do usuário
+            console.log('📄 Solicitando certificado do usuário...');
+            const { pfxData, senha } = await solicitarCertificado();
+            const resultado = await processarCertificado(pfxData, senha);
+            certificate = resultado.certificate;
+            privateKey = resultado.privateKey;
+        }
         
         // 3. PASSO 1 ABRASF: Assinar cada RPS individualmente
         console.log('📝 PASSO 1: Assinando RPS individualmente...');

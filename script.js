@@ -356,4 +356,49 @@
               ❌ Erro no Worker: ${error.message}<br>
               Verifique se o Worker está ativo em workers.cloudflare.com
             </div>`;
-        }      });      
+        }      });
+// Botão Debug Canonicalização
+      document.getElementById('btnTestarCanonicalizacao').addEventListener('click', async function() {
+        console.log('🧪 Botão Debug Canonicalização clicado');
+        
+        try {
+          document.getElementById('validationResults').innerHTML = 
+            '<div class="validation-info">🧪 Testando diferentes métodos de canonicalização...</div>';
+          document.getElementById('validationResults').style.display = 'block';
+          
+          // Verificar se existe função de teste
+          if (typeof testarAssinaturaPixelVivo === 'function') {
+            const resultados = await testarAssinaturaPixelVivo();
+            
+            if (resultados && resultados.length > 0) {
+              let html = '<div class="validation-success"><h4>🧪 Resultados dos Testes de Canonicalização:</h4>';
+              resultados.forEach((r, i) => {
+                html += `<p><strong>${i+1}. ${r.metodo}:</strong><br>`;
+                html += `Digest: ${r.digest.substring(0, 30)}...<br>`;
+                html += `Tamanho: ${r.tamanho} chars<br>`;
+                html += `Preview: ${r.preview.substring(0, 60)}...<br><br>`;
+              });
+              html += '<p><strong>📋 Verifique o console para logs detalhados!</strong></p></div>';
+              
+              document.getElementById('validationResults').innerHTML = html;
+              
+              console.log('🎯 INSTRUÇÕES PARA TESTAR:');
+              console.log('1. Copie um dos XMLs assinados com digest diferente');
+              console.log('2. Teste envio manual para identificar qual funciona');
+              console.log('3. Substitua a função canonicalizarXML pela versão que funcionar');
+              
+            } else {
+              document.getElementById('validationResults').innerHTML = 
+                '<div class="validation-error">❌ Nenhum resultado de teste obtido. Verifique o console.</div>';
+            }
+          } else {
+            document.getElementById('validationResults').innerHTML = 
+              '<div class="validation-error">❌ Função de teste não encontrada. Verifique se envio.js foi carregado.</div>';
+          }
+          
+        } catch (error) {
+          console.error('❌ Erro no teste de canonicalização:', error);
+          document.getElementById('validationResults').innerHTML = 
+            `<div class="validation-error">❌ Erro no teste: ${error.message}</div>`;
+        }
+      });

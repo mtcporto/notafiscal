@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Completo - Assinatura João Pessoa</title>
+    <script src="./node_modules/node-forge/dist/forge.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .debug-section { background: white; margin: 20px 0; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        .btn:hover { background: #0056b3; }
+        .xml-output { background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 400px; overflow: auto; }
+        .success { color: #28a745; font-weight: bold; }
+        .error { color: #dc3545; font-weight: bold; }
+        .warning { color: #ffc107; font-weight: bold; }
+        .info { color: #17a2b8; font-weight: bold; }
+        h2 { color: #495057; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .comparison-item { border: 1px solid #ddd; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Debug Completo - Assinatura João Pessoa</h1>
+        
+        <div class="debug-section">
+            <h2>🎯 Teste Rápido de Assinatura</h2>
+            <button class="btn" onclick="testarAssinaturaCompleta()">Testar Assinatura Completa</button>
+            <button class="btn" onclick="analisarCanonizacao()">Analisar Canonicalização</button>
+            <button class="btn" onclick="compararComModelo()">Comparar com Modelo Oficial</button>
+            <div id="resultado-teste" class="xml-output" style="display: none;"></div>
+        </div>
+
+        <div class="debug-section">
+            <h2>📊 Comparação Detalhada</h2>
+            <div class="comparison">
+                <div class="comparison-item">
+                    <h3>📋 Nosso XML</h3>
+                    <div id="nosso-xml" class="xml-output"></div>
+                </div>
+                <div class="comparison-item">
+                    <h3>📄 Modelo Oficial</h3>
+                    <div id="modelo-oficial" class="xml-output"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <h2>🔍 Debug Canonicalização</h2>
+            <div id="debug-canonizacao" class="xml-output"></div>
+        </div>
+
+        <div class="debug-section">
+            <h2>📤 Teste de Envio</h2>
+            <button class="btn" onclick="testarEnvioReal()">Enviar XML Assinado para Webservice</button>
+            <div id="resultado-envio" class="xml-output" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Função de canonicalização idêntica à usada no envio.js
+        function canonicalizarXML(xmlString) {
+            try {
+                console.log('📐 Aplicando canonicalização C14N específica para João Pessoa...');
+                
+                let canonical = xmlString
+                    .replace(/\r\n/g, '')
+                    .replace(/\r/g, '')
+                    .replace(/\n\s*/g, '')
+                    .replace(/>\s+</g, '><')
+                    .replace(/\s*=\s*/g, '=')
+                    .replace(/="\s+/g, '="')
+                    .replace(/\s+"/g, '"')
+                    .replace(/\s*\/>/g, '/>')
+                    .replace(/\s*>/g, '>')
+                    .trim();
+                
+                console.log('✅ Canonicalização específica para João Pessoa aplicada');
+                return canonical;
+                
+            } catch (error) {
+                console.error('❌ Erro na canonicalização:', error);
+                return xmlString;
+            }
+        }
+
+        // Gerar XML idêntico ao workflow normal
+        function gerarXMLTeste() {
+            const numeroRps = 123;
+            const serieRps = 'A1';
+            const agora = new Date();
+            const dataEmissao = agora.toISOString().split('T')[0];
+            const competencia = dataEmissao.substring(0, 7) + '-01';
+            
+            return `<RecepcionarLoteRps>
+<EnviarLoteRpsEnvio>
+<LoteRps Id="lote${numeroRps.toString().padStart(3, '0')}" versao="2.03">
+<NumeroLote>${numeroRps}</NumeroLote>
+<CpfCnpj>
+<Cnpj>15198135000180</Cnpj>
+</CpfCnpj>
+<InscricaoMunicipal>122781-5</InscricaoMunicipal>
+<QuantidadeRps>1</QuantidadeRps>
+<ListaRps>
+<Rps>
+<InfDeclaracaoPrestacaoServico Id="rps${numeroRps.toString().padStart(3, '0')}">
+<Rps Id="">
+<IdentificacaoRps>
+<Numero>${numeroRps}</Numero>
+<Serie>${serieRps}</Serie>
+<Tipo>1</Tipo>
+</IdentificacaoRps>
+<DataEmissao>${dataEmissao}</DataEmissao>
+<Status>1</Status>
+</Rps>
+<Competencia>${competencia}</Competencia>
+<Servico>
+<Valores>
+<ValorServicos>2500.00</ValorServicos>
+</Valores>
+<IssRetido>2</IssRetido>
+<ItemListaServico>01.01</ItemListaServico>
+<CodigoCnae>6201500</CodigoCnae>
+<Discriminacao>Desenvolvimento de programas de computador sob encomenda</Discriminacao>
+<CodigoMunicipio>2211001</CodigoMunicipio>
+<ExigibilidadeISS>1</ExigibilidadeISS>
+<MunicipioIncidencia>2211001</MunicipioIncidencia>
+</Servico>
+<Prestador>
+<CpfCnpj>
+<Cnpj>15198135000180</Cnpj>
+</CpfCnpj>
+<InscricaoMunicipal>122781-5</InscricaoMunicipal>
+</Prestador>
+<Tomador>
+<IdentificacaoTomador>
+<CpfCnpj>
+<Cpf>12345678901</Cpf>
+</CpfCnpj>
+</IdentificacaoTomador>
+<RazaoSocial>CLIENTE TESTE LTDA</RazaoSocial>
+<Endereco>
+<Endereco>RUA EXEMPLO</Endereco>
+<Numero>123</Numero>
+<Bairro>CENTRO</Bairro>
+<CodigoMunicipio>2211001</CodigoMunicipio>
+<Uf>PB</Uf>
+<Cep>58000000</Cep>
+</Endereco>
+</Tomador>
+<OptanteSimplesNacional>2</OptanteSimplesNacional>
+<IncentivoFiscal>2</IncentivoFiscal>
+</InfDeclaracaoPrestacaoServico>
+</Rps>
+</ListaRps>
+</LoteRps>
+</EnviarLoteRpsEnvio>
+</RecepcionarLoteRps>`;
+        }
+
+        // Função de assinatura idêntica à do envio.js
+        async function assinarXMLJoaoPessoa(xml) {
+            try {
+                console.log('🔐 Iniciando assinatura...');
+                
+                // Carregar certificado
+                const response = await fetch('./certificados/pixelvivo.pfx');
+                const pfxBuffer = await response.arrayBuffer();
+                const pfxBytes = new Uint8Array(pfxBuffer);
+                const senha = 'pixel2025';
+                
+                const p12Asn1 = forge.asn1.fromDer(forge.util.binary.raw.encode(pfxBytes));
+                const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, senha);
+                
+                const bags = p12.getBags({bagType: forge.pki.oids.certBag});
+                const certBag = bags[forge.pki.oids.certBag][0];
+                const certificate = certBag.cert;
+                
+                const keyBags = p12.getBags({bagType: forge.pki.oids.pkcs8ShroudedKeyBag});
+                const keyBag = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag][0];
+                const privateKey = keyBag.key;
+                
+                console.log('✅ Certificado carregado');
+
+                // Extrair LoteRps para assinatura
+                const loteRpsMatch = xml.match(/<LoteRps[^>]*>([\s\S]*?)<\/LoteRps>/);
+                if (!loteRpsMatch) {
+                    throw new Error('LoteRps não encontrado no XML');
+                }
+                
+                const loteRpsTag = xml.match(/<LoteRps[^>]*>/)[0];
+                const idMatch = loteRpsTag.match(/Id="([^"]*)"/);
+                if (!idMatch) {
+                    throw new Error('Id do LoteRps não encontrado');
+                }
+                
+                const loteRpsId = idMatch[1];
+                const loteRpsCompleto = loteRpsMatch[0];
+                
+                console.log('🎯 ID do LoteRps para assinatura:', loteRpsId);
+                
+                // Canonicalizar usando função específica para João Pessoa
+                const xmlCanonicalizado = canonicalizarXML(loteRpsCompleto);
+                
+                console.log('🔍 LoteRps original (primeiros 200 chars):', loteRpsCompleto.substring(0, 200));
+                console.log('🔍 LoteRps canonicalizado (primeiros 200 chars):', xmlCanonicalizado.substring(0, 200));
+                
+                // Digest SHA-1
+                const md = forge.md.sha1.create();
+                md.update(xmlCanonicalizado, 'utf8');
+                const digestValue = forge.util.encode64(md.digest().bytes());
+                
+                console.log('🔐 Digest Value:', digestValue);
+                
+                // SignedInfo conforme modelo oficial
+                const signedInfo = `<SignedInfo>
+<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<Reference URI="#${loteRpsId}">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<DigestValue>${digestValue}</DigestValue>
+</Reference>
+</SignedInfo>`;
+                
+                // Assinar SignedInfo
+                const signedInfoCanonicalizado = canonicalizarXML(signedInfo);
+                console.log('🔍 SignedInfo canonicalizado:', signedInfoCanonicalizado);
+                
+                const mdSignature = forge.md.sha1.create();
+                mdSignature.update(signedInfoCanonicalizado, 'utf8');
+                const signature = privateKey.sign(mdSignature);
+                const signatureValue = forge.util.encode64(signature);
+                
+                console.log('✅ Signature Value:', signatureValue);
+                
+                // Certificado
+                const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();
+                const certificateValue = forge.util.encode64(certDer);
+                
+                // Assinatura conforme modelo oficial
+                const xmlSignature = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+${signedInfo}
+<SignatureValue>${signatureValue}</SignatureValue>
+<KeyInfo>
+<X509Data>
+<X509Certificate>${certificateValue}</X509Certificate>
+</X509Data>
+</KeyInfo>
+</Signature>`;
+                
+                // Inserir assinatura APÓS LoteRps mas DENTRO de EnviarLoteRpsEnvio
+                const xmlAssinado = xml.replace('</LoteRps>', '</LoteRps>\n' + xmlSignature);
+                
+                console.log('✅ XML assinado gerado');
+                return xmlAssinado;
+                
+            } catch (error) {
+                console.error('❌ Erro na assinatura:', error);
+                throw error;
+            }
+        }
+
+        // Teste completo de assinatura
+        async function testarAssinaturaCompleta() {
+            const resultadoDiv = document.getElementById('resultado-teste');
+            resultadoDiv.style.display = 'block';
+            resultadoDiv.innerHTML = '<div class="info">🔄 Gerando XML e aplicando assinatura...</div>';
+            
+            try {
+                // 1. Gerar XML
+                const xml = gerarXMLTeste();
+                console.log('📄 XML gerado:', xml);
+                
+                // 2. Assinar XML
+                const xmlAssinado = await assinarXMLJoaoPessoa(xml);
+                console.log('🔐 XML assinado:', xmlAssinado);
+                
+                // 3. Mostrar resultado
+                resultadoDiv.innerHTML = `
+                    <div class="success">✅ XML assinado com sucesso!</div>
+                    <div><strong>Tamanho:</strong> ${xmlAssinado.length} caracteres</div>
+                    <div><strong>Contém Signature:</strong> ${xmlAssinado.includes('<Signature') ? 'Sim' : 'Não'}</div>
+                    <div><strong>XML Assinado:</strong></div>
+                    <pre>${xmlAssinado}</pre>
+                `;
+                
+                // Armazenar para uso posterior
+                window.xmlAssinadoTeste = xmlAssinado;
+                
+            } catch (error) {
+                resultadoDiv.innerHTML = `<div class="error">❌ Erro: ${error.message}</div>`;
+                console.error('❌ Erro no teste:', error);
+            }
+        }
+
+        // Análise de canonicalização
+        function analisarCanonizacao() {
+            const xml = gerarXMLTeste();
+            const loteRpsMatch = xml.match(/<LoteRps[^>]*>([\s\S]*?)<\/LoteRps>/);
+            
+            if (loteRpsMatch) {
+                const loteRpsOriginal = loteRpsMatch[0];
+                const loteRpsCanonicalizado = canonicalizarXML(loteRpsOriginal);
+                
+                document.getElementById('debug-canonizacao').innerHTML = `
+                    <div><strong>🔍 Análise de Canonicalização</strong></div>
+                    <div><strong>Original (${loteRpsOriginal.length} chars):</strong></div>
+                    <pre>${loteRpsOriginal}</pre>
+                    <div><strong>Canonicalizado (${loteRpsCanonicalizado.length} chars):</strong></div>
+                    <pre>${loteRpsCanonicalizado}</pre>
+                    <div><strong>Diferenças encontradas:</strong></div>
+                    <div>• Quebras de linha removidas: ${(loteRpsOriginal.match(/\n/g) || []).length}</div>
+                    <div>• Espaços reduzidos: ${loteRpsOriginal.length - loteRpsCanonicalizado.length} caracteres</div>
+                `;
+            }
+        }
+
+        // Comparar com modelo oficial
+        function compararComModelo() {
+            const nossoXml = gerarXMLTeste();
+            const modeloOficial = `<RecepcionarLoteRps>
+<EnviarLoteRpsEnvio>
+<LoteRps Id="RPS123456-ASSINA ESTE ID" versao="?">
+<NumeroLote>?</NumeroLote>
+<CpfCnpj>
+<Cnpj>??????????????</Cnpj>
+</CpfCnpj>
+<InscricaoMunicipal>??????</InscricaoMunicipal>
+<QuantidadeRps>1</QuantidadeRps>
+<ListaRps>
+<Rps>
+<InfDeclaracaoPrestacaoServico Id="">
+<Rps Id="">
+...
+</Rps>
+</ListaRps>
+</LoteRps>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+...
+</Signature>
+</EnviarLoteRpsEnvio>
+</RecepcionarLoteRps>`;
+            
+            document.getElementById('nosso-xml').textContent = nossoXml;
+            document.getElementById('modelo-oficial').textContent = modeloOficial;
+        }
+
+        // Testar envio real
+        async function testarEnvioReal() {
+            if (!window.xmlAssinadoTeste) {
+                alert('Execute primeiro o teste de assinatura!');
+                return;
+            }
+            
+            const resultadoDiv = document.getElementById('resultado-envio');
+            resultadoDiv.style.display = 'block';
+            resultadoDiv.innerHTML = '<div class="info">🔄 Enviando para webservice...</div>';
+            
+            try {
+                // Criar envelope SOAP conforme envio.js
+                const xmlSemDeclaracao = window.xmlAssinadoTeste.replace(/^<\?xml[^>]*\?>\s*/, '');
+                const soapEnvelope = `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <RecepcionarLoteRps xmlns="http://nfse.abrasf.org.br">
+      ${xmlSemDeclaracao}
+    </RecepcionarLoteRps>
+  </soap:Body>
+</soap:Envelope>`;
+
+                console.log('📤 Enviando envelope SOAP:', soapEnvelope);
+
+                // Tentar envio via proxy
+                const response = await fetch('https://nfse.mosaicoworkers.workers.dev/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        url: 'https://serem-hml.joaopessoa.pb.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap',
+                        soapEnvelope: soapEnvelope,
+                        headers: {
+                            'Content-Type': 'text/xml; charset=utf-8',
+                            'SOAPAction': ''
+                        }
+                    })
+                });
+
+                const result = await response.json();
+                console.log('📨 Resposta recebida:', result);
+
+                if (result.success) {
+                    const resposta = result.response;
+                    
+                    let status = 'info';
+                    let titulo = '📡 Resposta do Webservice';
+                    
+                    if (resposta.includes('erro na assinatura') || resposta.includes('Acerte a assinatura')) {
+                        status = 'error';
+                        titulo = '❌ AINDA HÁ ERRO NA ASSINATURA';
+                    } else if (resposta.includes('Protocolo') || resposta.includes('protocolo')) {
+                        status = 'success';
+                        titulo = '✅ SUCESSO - SEM ERRO DE ASSINATURA';
+                    } else if (resposta.includes('soap:Fault')) {
+                        status = 'warning';
+                        titulo = '⚠️ SOAP Fault (mas não erro de assinatura)';
+                    }
+                    
+                    resultadoDiv.innerHTML = `
+                        <div class="${status}"><strong>${titulo}</strong></div>
+                        <div><strong>HTTP Code:</strong> ${result.httpCode || 'N/A'}</div>
+                        <div><strong>Resposta:</strong></div>
+                        <pre>${resposta}</pre>
+                    `;
+                } else {
+                    resultadoDiv.innerHTML = `<div class="error">❌ Erro: ${result.error}</div>`;
+                }
+                
+            } catch (error) {
+                resultadoDiv.innerHTML = `<div class="error">❌ Erro no envio: ${error.message}</div>`;
+                console.error('❌ Erro:', error);
+            }
+        }
+
+        // Auto-executar análise inicial
+        setTimeout(() => {
+            analisarCanonizacao();
+            compararComModelo();
+        }, 1000);
+    </script>
+</body>
+</html>

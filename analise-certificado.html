@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise de Certificado</title>
+    <script src="./node_modules/node-forge/dist/forge.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .result { background: white; margin: 10px 0; padding: 15px; border-radius: 5px; border-left: 4px solid #007bff; }
+        .success { border-left-color: #28a745; }
+        .warning { border-left-color: #ffc107; }
+        .error { border-left-color: #dc3545; }
+        .btn { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        .btn:hover { background: #0056b3; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Análise de Certificado para João Pessoa</h1>
+        
+        <button class="btn" onclick="executarAnalise()">Analisar Certificado</button>
+        
+        <div id="resultados"></div>
+    </div>
+
+    <script src="./analise-certificado.js"></script>
+    
+    <script>
+        function executarAnalise() {
+            const resultadosDiv = document.getElementById('resultados');
+            resultadosDiv.innerHTML = '<div class="result"><div style="color: #007bff;">🔄 Analisando certificado...</div></div>';
+            
+            // Redirecionar console.log para a página
+            const originalLog = console.log;
+            const logs = [];
+            
+            console.log = function(...args) {
+                logs.push(args.join(' '));
+                originalLog.apply(console, arguments);
+            };
+            
+            // Executar análise
+            setTimeout(async () => {
+                try {
+                    await analisarCertificado();
+                    
+                    // Restaurar console.log
+                    console.log = originalLog;
+                    
+                    // Exibir resultados
+                    let html = '';
+                    logs.forEach(log => {
+                        let className = 'result';
+                        if (log.includes('✅') || log.includes('SUCESSO')) {
+                            className += ' success';
+                        } else if (log.includes('⚠️') || log.includes('VERIFICAR')) {
+                            className += ' warning';
+                        } else if (log.includes('❌') || log.includes('ERRO')) {
+                            className += ' error';
+                        }
+                        
+                        html += `<div class="${className}"><pre>${log}</pre></div>`;
+                    });
+                    
+                    resultadosDiv.innerHTML = html;
+                    
+                } catch (error) {
+                    console.log = originalLog;
+                    resultadosDiv.innerHTML = `<div class="result error"><pre>❌ Erro: ${error.message}</pre></div>`;
+                }
+            }, 100);
+        }
+    </script>
+</body>
+</html>

@@ -10,6 +10,69 @@
 // - Sistema de notificações de vencimento
 // ==================================================
 
+// ==================== FUNÇÕES AUXILIARES ====================
+
+// Converter ArrayBuffer para Base64
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+// Converter Base64 para ArrayBuffer
+function base64ToArrayBuffer(base64) {
+  const binary_string = atob(base64);
+  const len = binary_string.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary_string.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+// Função auxiliar para sleep
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Função para formatar CPF/CNPJ (precisa estar aqui para o painel funcionar)
+function formatarDocumento(documento, tipo) {
+  if (tipo === 'cpf') {
+    return documento.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  } else {
+    return documento.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  }
+}
+
+// Auto-preencher dados do prestador com informações da Pixel Vivo
+function autoPreencherDadosPixelVivo() {
+  try {
+    // Verificar se os campos existem antes de preencher
+    const razaoPrestador = document.getElementById('razaoPrestador');
+    const cnpjPrestador = document.getElementById('cnpjPrestador');
+    const imPrestador = document.getElementById('imPrestador');
+    
+    if (razaoPrestador && cnpjPrestador && imPrestador) {
+      razaoPrestador.value = 'PIXEL VIVO SOLUCOES WEB LTDA';
+      cnpjPrestador.value = '15.198.135/0001-80';
+      imPrestador.value = '122781-5';
+      
+      console.log('✅ Dados do prestador preenchidos automaticamente com informações da Pixel Vivo');
+      
+      // Mostrar notificação para o usuário
+      setTimeout(() => {
+        alert('✅ Certificado da PIXEL VIVO configurado com sucesso!\n\n🏢 Dados do prestador foram preenchidos automaticamente:\n• Razão Social: PIXEL VIVO SOLUCOES WEB LTDA\n• CNPJ: 15.198.135/0001-80\n• Inscrição Municipal: 122781-5\n\n📋 Agora você pode preencher os dados do tomador e serviço.');
+      }, 500);
+    }
+  } catch (error) {
+    console.error('Erro ao auto-preencher dados da Pixel Vivo:', error);
+  }
+}
+
 // ==================== MODAL DE CONFIGURAÇÕES ====================
 
 function abrirModal() {
@@ -142,15 +205,35 @@ async function testarCertificado() {
         if (resultadoValidacao.valido) {
         statusDiv.innerHTML = `<span class="status-indicator status-success"></span>Certificado A1 válido - ${resultadoValidacao.nomeTitular}`;
         
-        // Salvar dados do certificado para uso posterior (sem a senha por segurança)
+        // Salvar dados do certificado para uso posterior (incluindo dados para assinatura)
+        const arrayBuffer = await arquivo.arrayBuffer();
+        const dadosBase64 = arrayBufferToBase64(arrayBuffer);
+        
+        console.log('💾 Salvando certificado...');
+        console.log('📊 Tamanho do arquivo:', arrayBuffer.byteLength, 'bytes');
+        console.log('📊 Tamanho em base64:', dadosBase64.length, 'caracteres');
+        console.log('🔍 Início do base64:', dadosBase64.substring(0, 50) + '...');
+        
         const dadosCertificado = {
           tipo: 'A1',
-          nomeTitular: resultadoValidacao.nomeTitular,
+          titular: resultadoValidacao.nomeTitular,
           cpfCnpj: resultadoValidacao.cpfCnpj,
-          validadeAte: resultadoValidacao.validadeAte,
+          validade: resultadoValidacao.validadeAte,
           emissor: resultadoValidacao.emissor,
-          nomeArquivo: arquivo.name
+          nomeArquivo: arquivo.name,
+          // CRÍTICO: Salvar dados para assinatura (convertidos para base64)
+          dados: dadosBase64,
+          senha: senha // Em produção, seria criptografado
         };
+        
+        console.log('💾 Dados a serem salvos:', {
+          tipo: dadosCertificado.tipo,
+          titular: dadosCertificado.titular,
+          temDados: !!dadosCertificado.dados,
+          tamanhoBase64: dadosCertificado.dados ? dadosCertificado.dados.length : 0,
+          temSenha: !!dadosCertificado.senha
+        });
+        
         localStorage.setItem('certificadoValidado', JSON.stringify(dadosCertificado));
         
         // Auto-preencher dados do prestador se for certificado da Pixel Vivo
@@ -999,47 +1082,6 @@ function initializeCertificateMonitoring() {
   
   // Start certificate expiration monitoring
   iniciarMonitoramentoVencimento();
-}
-
-// ==================== FUNÇÕES AUXILIARES ====================
-
-// Função auxiliar para sleep
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Função para formatar CPF/CNPJ (precisa estar aqui para o painel funcionar)
-function formatarDocumento(documento, tipo) {
-  if (tipo === 'cpf') {
-    return documento.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-  } else {
-    return documento.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-  }
-}
-
-// Auto-preencher dados do prestador com informações da Pixel Vivo
-function autoPreencherDadosPixelVivo() {
-  try {
-    // Verificar se os campos existem antes de preencher
-    const razaoPrestador = document.getElementById('razaoPrestador');
-    const cnpjPrestador = document.getElementById('cnpjPrestador');
-    const imPrestador = document.getElementById('imPrestador');
-    
-    if (razaoPrestador && cnpjPrestador && imPrestador) {
-      razaoPrestador.value = 'PIXEL VIVO SOLUCOES WEB LTDA';
-      cnpjPrestador.value = '15.198.135/0001-80';
-      imPrestador.value = '122781-5';
-      
-      console.log('✅ Dados do prestador preenchidos automaticamente com informações da Pixel Vivo');
-      
-      // Mostrar notificação para o usuário
-      setTimeout(() => {
-        alert('✅ Certificado da PIXEL VIVO configurado com sucesso!\n\n🏢 Dados do prestador foram preenchidos automaticamente:\n• Razão Social: PIXEL VIVO SOLUCOES WEB LTDA\n• CNPJ: 15.198.135/0001-80\n• Inscrição Municipal: 122781-5\n\n📋 Agora você pode preencher os dados do tomador e serviço.');
-      }, 500);
-    }
-  } catch (error) {
-    console.error('Erro ao auto-preencher dados da Pixel Vivo:', error);
-  }
 }
 
 // ==================== EXPORTAR PARA ESCOPO GLOBAL ====================

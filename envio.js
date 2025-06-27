@@ -9,6 +9,50 @@
 // - Tratamento de erros de assinatura e envio
 // ==================================================
 
+// ==================== FUNÇÕES DE CANONICALIZAÇÃO ====================
+
+// Função de canonicalização específica para João Pessoa - VERSÃO QUE FUNCIONOU
+function canonicalizarXML(xmlString) {
+    try {
+        console.log('📐 Aplicando canonicalização C14N específica para João Pessoa...');
+        
+        // Canonicalização ESPECÍFICA para resolver problemas com João Pessoa
+        // Base nos erros mais comuns reportados pelos webservices ABRASF
+        let canonical = xmlString
+            // 1. CRÍTICO: Remover TODOS os \r\n que quebram a validação de hash
+            .replace(/\r\n/g, '')
+            .replace(/\r/g, '')
+            
+            // 2. Remover quebras de linha e normalizar para formato compacto
+            .replace(/\n\s*/g, '')
+            
+            // 3. Remover espaços múltiplos entre tags
+            .replace(/>\s+</g, '><')
+            
+            // 4. Normalizar espaços em atributos
+            .replace(/\s*=\s*/g, '=')
+            .replace(/="\s+/g, '="')
+            .replace(/\s+"/g, '"')
+            
+            // 5. Remover espaços antes de fechamentos de tag
+            .replace(/\s*\/>/g, '/>')
+            .replace(/\s*>/g, '>')
+            
+            // 6. Trim final
+            .trim();
+        
+        console.log('✅ Canonicalização específica para João Pessoa aplicada');
+        console.log('🔍 DEBUG: Removidos todos \\r\\n e normalizado espaçamento');
+        console.log('🎯 FOCO: Corrigido para compatibilidade máxima com webservice João Pessoa');
+        return canonical;
+        
+    } catch (error) {
+        console.error('❌ Erro na canonicalização:', error);
+        // Em caso de erro, retorna o XML original
+        return xmlString;
+    }
+}
+
 // ==================== FUNÇÃO PRINCIPAL DE ENVIO ====================
 
 // Função principal para enviar XML para webservice
@@ -794,19 +838,20 @@ function obterUrlWebservicePadrao() {
 
 // Criar envelope SOAP para envio conforme WSDL de João Pessoa
 function criarEnvelopeSOAP(xmlContent, versao = '2.03') {
-  // Envelope SOAP ULTRA-COMPATÍVEL conforme WSDL de João Pessoa
-  // Namespace exato conforme documentação ABRASF
-  // CORRIGIDO: remover declaração XML duplicada do conteúdo
+  // Envelope SOAP EXATO conforme WSDL de João Pessoa
+  // targetNamespace="http://nfse.abrasf.org.br" 
+  // operação: RecepcionarLoteRps
+  // CORRIGIDO: usar namespace default conforme WSDL
   const xmlSemDeclaracao = xmlContent.replace(/^<\?xml[^>]*\?>\s*/, '');
   
-  console.log('📦 Criando envelope SOAP ULTRA-COMPATÍVEL para João Pessoa...');
+  console.log('📦 Criando envelope SOAP EXATO conforme WSDL de João Pessoa...');
   
   return `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:nfse="http://nfse.abrasf.org.br">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
-    <nfse:RecepcionarLoteRps>
+    <RecepcionarLoteRps xmlns="http://nfse.abrasf.org.br">
       ${xmlSemDeclaracao}
-    </nfse:RecepcionarLoteRps>
+    </RecepcionarLoteRps>
   </soap:Body>
 </soap:Envelope>`;
 }
@@ -1123,9 +1168,182 @@ async function enviarViaProxyAlternativo(proxy, urlWebservice, soapEnvelope) {
   }
 }
 
-// ==================================================
-// FUNÇÕES ORIGINAIS DE ENVIO
-// ==================================================
+// ==================== ASSINATURA ESPECÍFICA JOÃO PESSOA ====================
+
+// Função para assinar apenas LoteRps conforme modelo João Pessoa
+async function assinarApenasLoteRpsJoaoPessoa(xml, certificate, privateKey) {
+  console.log('🔐 Assinando apenas LoteRps para João Pessoa...');
+  
+  try {
+    // Extrair LoteRps para assinatura
+    const loteRpsMatch = xml.match(/<LoteRps[^>]*>([\s\S]*?)<\/LoteRps>/);
+    if (!loteRpsMatch) {
+      throw new Error('LoteRps não encontrado no XML');
+    }
+    
+    const loteRpsTag = xml.match(/<LoteRps[^>]*>/)[0];
+    const idMatch = loteRpsTag.match(/Id="([^"]*)"/);
+    if (!idMatch) {
+      throw new Error('Id do LoteRps não encontrado');
+    }
+    
+    const loteRpsId = idMatch[1];
+    const loteRpsCompleto = loteRpsMatch[0];
+    
+    console.log('🎯 ID do LoteRps para assinatura:', loteRpsId);
+    
+    // Canonicalizar usando função específica para João Pessoa
+    const xmlCanonicalizado = canonicalizarXML(loteRpsCompleto);
+    
+    // Digest SHA-1
+    const md = forge.md.sha1.create();
+    md.update(xmlCanonicalizado, 'utf8');
+    const digestValue = forge.util.encode64(md.digest().bytes());
+    
+    console.log('🔐 Digest Value:', digestValue.substring(0, 20) + '...');
+    
+    // SignedInfo EXATO que funcionou nos testes (SEM xmlns)
+    const signedInfo = `<SignedInfo>
+<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<Reference URI="#${loteRpsId}">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<DigestValue>${digestValue}</DigestValue>
+</Reference>
+</SignedInfo>`;
+    
+    // Assinar SignedInfo
+    const signedInfoCanonicalizado = canonicalizarXML(signedInfo);
+    const mdSignature = forge.md.sha1.create();
+    mdSignature.update(signedInfoCanonicalizado, 'utf8');
+    const signature = privateKey.sign(mdSignature);
+    const signatureValue = forge.util.encode64(signature);
+    
+    console.log('✅ Signature Value:', signatureValue.substring(0, 30) + '...');
+    
+    // Certificado
+    const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();
+    const certificateValue = forge.util.encode64(certDer);
+    
+    // Assinatura conforme modelo oficial
+    const xmlSignature = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+${signedInfo}
+<SignatureValue>${signatureValue}</SignatureValue>
+<KeyInfo>
+<X509Data>
+<X509Certificate>${certificateValue}</X509Certificate>
+</X509Data>
+</KeyInfo>
+</Signature>`;
+    
+    // Inserir assinatura APÓS LoteRps mas DENTRO de EnviarLoteRpsEnvio (conforme modelo oficial)
+    const xmlAssinado = xml.replace('</LoteRps>', '</LoteRps>\n' + xmlSignature);
+    
+    console.log('✅ XML assinado conforme modelo oficial João Pessoa');
+    console.log('📊 Tamanho final:', xmlAssinado.length, 'caracteres');
+    
+    return xmlAssinado;
+    
+  } catch (erro) {
+    console.error('❌ Erro na assinatura João Pessoa:', erro);
+    throw erro;
+  }
+}
+
+// Função alternativa para assinar EnviarLoteRpsEnvio completo (teste)
+async function assinarEnviarLoteRpsEnvioCompleto(xml, certificate, privateKey) {
+  console.log('🔐 Teste: Assinando EnviarLoteRpsEnvio completo para João Pessoa...');
+  
+  try {
+    // Extrair EnviarLoteRpsEnvio para assinatura
+    const enviarLoteMatch = xml.match(/<EnviarLoteRpsEnvio[^>]*>([\s\S]*?)<\/EnviarLoteRpsEnvio>/);
+    if (!enviarLoteMatch) {
+      throw new Error('EnviarLoteRpsEnvio não encontrado no XML');
+    }
+    
+    // Adicionar ID ao EnviarLoteRpsEnvio se não existir
+    let xmlModificado = xml;
+    if (!xml.includes('<EnviarLoteRpsEnvio Id=')) {
+      xmlModificado = xml.replace('<EnviarLoteRpsEnvio>', '<EnviarLoteRpsEnvio Id="envio123">');
+    }
+    
+    const enviarLoteCompleto = xmlModificado.match(/<EnviarLoteRpsEnvio[^>]*>([\s\S]*?)<\/EnviarLoteRpsEnvio>/)[0];
+    const enviarLoteTag = xmlModificado.match(/<EnviarLoteRpsEnvio[^>]*>/)[0];
+    const idMatch = enviarLoteTag.match(/Id="([^"]*)"/);
+    
+    if (!idMatch) {
+      throw new Error('Id do EnviarLoteRpsEnvio não encontrado');
+    }
+    
+    const enviarLoteId = idMatch[1];
+    
+    console.log('🎯 ID do EnviarLoteRpsEnvio para assinatura:', enviarLoteId);
+    
+    // Canonicalizar usando função específica para João Pessoa
+    const xmlCanonicalizado = canonicalizarXML(enviarLoteCompleto);
+    
+    // Digest SHA-1
+    const md = forge.md.sha1.create();
+    md.update(xmlCanonicalizado, 'utf8');
+    const digestValue = forge.util.encode64(md.digest().bytes());
+    
+    console.log('🔐 Digest Value (EnviarLoteRpsEnvio):', digestValue.substring(0, 20) + '...');
+    
+    // SignedInfo conforme modelo oficial EXATO João Pessoa
+    const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#">
+<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<Reference URI="#${enviarLoteId}">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<DigestValue>${digestValue}</DigestValue>
+</Reference>
+</SignedInfo>`;
+    
+    // Assinar SignedInfo
+    const signedInfoCanonicalizado = canonicalizarXML(signedInfo);
+    const mdSignature = forge.md.sha1.create();
+    mdSignature.update(signedInfoCanonicalizado, 'utf8');
+    const signature = privateKey.sign(mdSignature);
+    const signatureValue = forge.util.encode64(signature);
+    
+    console.log('✅ Signature Value (EnviarLoteRpsEnvio):', signatureValue.substring(0, 30) + '...');
+    
+    // Certificado
+    const certDer = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();
+    const certificateValue = forge.util.encode64(certDer);
+    
+    // Assinatura conforme modelo oficial
+    const xmlSignature = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+${signedInfo}
+<SignatureValue>${signatureValue}</SignatureValue>
+<KeyInfo>
+<X509Data>
+<X509Certificate>${certificateValue}</X509Certificate>
+</X509Data>
+</KeyInfo>
+</Signature>`;
+    
+    // Inserir assinatura DENTRO de EnviarLoteRpsEnvio, após LoteRps
+    const xmlAssinado = xmlModificado.replace('</LoteRps>', '</LoteRps>\n' + xmlSignature);
+    
+    console.log('✅ XML assinado (EnviarLoteRpsEnvio completo) conforme modelo oficial João Pessoa');
+    console.log('📊 Tamanho final:', xmlAssinado.length, 'caracteres');
+    
+    return xmlAssinado;
+    
+  } catch (erro) {
+    console.error('❌ Erro na assinatura EnviarLoteRpsEnvio:', erro);
+    throw erro;
+  }
+}
 
 // ==================== ASSINATURA DIGITAL ====================
 
@@ -1134,22 +1352,89 @@ async function aplicarAssinaturaDigital(xml, config) {
   console.log('🔐 Aplicando assinatura digital...');
   
   try {
-    // SEMPRE usar assinatura node-forge completa ABRASF
-    console.log('🔐 Aplicando assinatura COMPLETA ABRASF com node-forge...');
-    const xmlAssinado = await assinarXMLCompleto(xml, false); // false = usar certificado da configuração
+    // Detectar se é João Pessoa pela estrutura do XML
+    const isJoaoPessoa = xml.includes('<RecepcionarLoteRps>') && xml.includes('<InfDeclaracaoPrestacaoServico');
     
-    return {
-      sucesso: true,
-      xmlAssinado: xmlAssinado,
-      certificadoInfo: {
-        titular: 'PIXEL VIVO SOLUCOES WEB LTDA',
-        cpfCnpj: '15198135000180',
-        emissor: 'AC Certisign RFB G5',
-        validade: '2026-06-12',
-        tipo: 'A1'
-      },
-      timestampAssinatura: new Date().toISOString()
-    };
+    if (isJoaoPessoa) {
+      console.log('🎯 Detectado João Pessoa - usando assinatura CONSERVADORA (LoteRps apenas)...');
+      
+      // CORRIGIDO: Buscar certificado do localStorage (não do config)
+      const certificadoValidado = localStorage.getItem('certificadoValidado');
+      
+      if (!certificadoValidado) {
+        // Se não há certificado configurado, solicitar
+        console.log('📄 Certificado não configurado, solicitando do usuário...');
+        throw new Error('🔐 CERTIFICADO NECESSÁRIO\n\nPara assinar o XML, configure um certificado digital:\n\n1. Clique em "Configurações"\n2. Aba "Certificado Digital"\n3. Faça upload do arquivo .pfx/.p12\n4. Digite a senha\n5. Salve e tente novamente');
+      }
+      
+      const certificadoConfig = JSON.parse(certificadoValidado);
+      
+      // Verificar se os dados necessários estão presentes
+      if (!certificadoConfig.dados || !certificadoConfig.senha) {
+        console.error('❌ Dados do certificado incompletos:', certificadoConfig);
+        throw new Error('🔐 CERTIFICADO INCOMPLETO\n\nOs dados do certificado estão incompletos:\n\n• Dados binários: ' + (certificadoConfig.dados ? 'OK' : 'AUSENTE') + '\n• Senha: ' + (certificadoConfig.senha ? 'OK' : 'AUSENTE') + '\n\nPor favor, configure o certificado novamente.');
+      }
+      
+      console.log('🔐 Usando certificado configurado pelo usuário...');
+      console.log('📋 Tipo:', certificadoConfig.tipo, '| Titular:', certificadoConfig.titular);
+      console.log('🔍 Dados do certificado:', {
+        temDados: !!certificadoConfig.dados,
+        tamanhoBase64: certificadoConfig.dados ? certificadoConfig.dados.length : 0,
+        temSenha: !!certificadoConfig.senha
+      });
+      
+      // Usar função de processamento existente com dados do usuário
+      const dadosBinarios = base64ToUint8Array(certificadoConfig.dados);
+      const { certificate, privateKey } = await processarCertificado(
+        dadosBinarios, 
+        certificadoConfig.senha
+      );
+      
+      // Voltar para abordagem original: assinar apenas LoteRps
+      const xmlAssinado = await assinarApenasLoteRpsJoaoPessoa(xml, certificate, privateKey);
+      
+      return {
+        sucesso: true,
+        xmlAssinado: xmlAssinado,
+        certificadoInfo: {
+          titular: certificadoConfig.titular || 'Certificado Digital',
+          cpfCnpj: certificadoConfig.cpfCnpj || 'N/A',
+          emissor: certificadoConfig.emissor || 'Autoridade Certificadora',
+          validade: certificadoConfig.validade || 'N/A',
+          tipo: certificadoConfig.tipo || 'A1'
+        },
+        timestampAssinatura: new Date().toISOString()
+      };
+      
+    } else {
+      // ABRASF padrão para outras cidades
+      console.log('🔐 Aplicando assinatura COMPLETA ABRASF com node-forge...');
+      
+      // CORRIGIDO: Para outras cidades, também usar certificado do localStorage
+      const certificadoValidado = localStorage.getItem('certificadoValidado');
+      
+      if (!certificadoValidado) {
+        console.log('📄 Certificado não configurado, solicitando do usuário...');
+        throw new Error('🔐 CERTIFICADO NECESSÁRIO\n\nPara assinar o XML, configure um certificado digital:\n\n1. Clique em "Configurações"\n2. Aba "Certificado Digital"\n3. Faça upload do arquivo .pfx/.p12\n4. Digite a senha\n5. Salve e tente novamente');
+      }
+      
+      const certificadoConfig = JSON.parse(certificadoValidado);
+      
+      const xmlAssinado = await assinarXMLCompleto(xml, certificadoConfig);
+      
+      return {
+        sucesso: true,
+        xmlAssinado: xmlAssinado,
+        certificadoInfo: {
+          titular: certificadoConfig.titular || 'Certificado Digital',
+          cpfCnpj: certificadoConfig.cpfCnpj || 'N/A',
+          emissor: certificadoConfig.emissor || 'Autoridade Certificadora',
+          validade: certificadoConfig.validade || 'N/A',
+          tipo: certificadoConfig.tipo || 'A1'
+        },
+        timestampAssinatura: new Date().toISOString()
+      };
+    }
     
   } catch (error) {
     console.error('❌ Erro na assinatura digital:', error);
@@ -1660,3 +1945,135 @@ async function testarMultiplosEndpoints() {
 
 // Adicionar ao escopo global
 window.testarMultiplosEndpoints = testarMultiplosEndpoints;
+
+// ==================== FUNÇÕES DE DEBUG E TESTE ====================
+
+// Função para testar diferentes canonicalizações no browser
+async function testarDiferentesCanonicalizacoes(xml, certificate, privateKey) {
+    console.log('🧪 Testando diferentes métodos de canonicalização...');
+    
+    const metodos = [
+        {
+            nome: 'Ultra Agressiva (atual)',
+            funcao: canonicalizarXML
+        },
+        {
+            nome: 'Sem espaços absolutamente',
+            funcao: (xmlString) => xmlString.replace(/\s/g, '')
+        },
+        {
+            nome: 'Só quebras de linha',
+            funcao: (xmlString) => xmlString.replace(/[\r\n]/g, '').replace(/>\s+</g, '><')
+        },
+        {
+            nome: 'Estilo Java (compact)',
+            funcao: (xmlString) => xmlString.replace(/\s+/g, ' ').replace(/> </g, '><').trim()
+        }
+    ];
+    
+    const resultados = [];
+    
+    for (const metodo of metodos) {
+        try {
+            console.log(`\n🔍 Testando: ${metodo.nome}`);
+            
+            // Extrair LoteRps
+            const loteRpsMatch = xml.match(/<LoteRps[^>]*>([\s\S]*?)<\/LoteRps>/);
+            if (!loteRpsMatch) continue;
+            
+            const loteRpsTag = xml.match(/<LoteRps[^>]*>/)[0];
+            const idMatch = loteRpsTag.match(/Id="([^"]*)"/);
+            if (!idMatch) continue;
+            
+            const loteRpsId = idMatch[1];
+            const loteRpsCompleto = loteRpsMatch[0];
+            
+            // Aplicar canonicalização do método
+            const xmlCanonicalizado = metodo.funcao(loteRpsCompleto);
+            
+            // Digest SHA-1
+            const md = forge.md.sha1.create();
+            md.update(xmlCanonicalizado, 'utf8');
+            const digestValue = forge.util.encode64(md.digest().bytes());
+            
+            console.log(`📊 ${metodo.nome}:`);
+            console.log(`   Tamanho: ${xmlCanonicalizado.length}`);
+            console.log(`   Digest: ${digestValue.substring(0, 20)}...`);
+            console.log(`   Primeiros 50 chars: ${xmlCanonicalizado.substring(0, 50)}`);
+            
+            resultados.push({
+                metodo: metodo.nome,
+                digest: digestValue,
+                tamanho: xmlCanonicalizado.length,
+                preview: xmlCanonicalizado.substring(0, 100)
+            });
+            
+        } catch (erro) {
+            console.error(`❌ Erro no método ${metodo.nome}:`, erro);
+        }
+    }
+    
+    console.log('\n📊 RESUMO DOS TESTES:');
+    resultados.forEach((r, i) => {
+        console.log(`${i+1}. ${r.metodo}: Digest=${r.digest.substring(0,15)}... (${r.tamanho} chars)`);
+    });
+    
+    return resultados;
+}
+
+// Função para testar assinatura com certificado Pixel Vivo no browser
+async function testarAssinaturaPixelVivo() {
+    console.log('🧪 TESTE: Assinatura com Pixel Vivo no browser');
+    
+    try {
+        // Obter XML atual da interface
+        const xmlOutputElement = document.getElementById('xmlOutput');
+        if (!xmlOutputElement || !xmlOutputElement.textContent.includes('<LoteRps')) {
+            throw new Error('XML não encontrado. Gere um XML primeiro.');
+        }
+        
+        const xmlContent = xmlOutputElement.textContent;
+        console.log('📄 XML obtido da interface, tamanho:', xmlContent.length);
+        
+        // Carregar certificado Pixel Vivo
+        const response = await fetch('./certificados/pixelvivo.pfx');
+        const pfxBuffer = await response.arrayBuffer();
+        const pfxBytes = new Uint8Array(pfxBuffer);
+        const senha = 'pixel2025';
+        
+        // Processar certificado
+        const { certificate, privateKey } = await processarCertificado(pfxBytes, senha);
+        console.log('✅ Certificado Pixel Vivo carregado');
+        
+        // Testar diferentes canonicalizações
+        const resultados = await testarDiferentesCanonicalizacoes(xmlContent, certificate, privateKey);
+        
+        console.log('🎯 Teste concluído. Resultados salvos no console.');
+        return resultados;
+        
+    } catch (erro) {
+        console.error('❌ Erro no teste:', erro);
+        return null;
+    }
+}
+
+// ==================== FUNÇÕES AUXILIARES PARA CERTIFICADO ====================
+
+// Converter Base64 para Uint8Array
+function base64ToUint8Array(base64) {
+  if (!base64 || typeof base64 !== 'string') {
+    throw new Error('Dados do certificado inválidos ou ausentes');
+  }
+  
+  try {
+    const binary_string = atob(base64);
+    const len = binary_string.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binary_string.charCodeAt(i);
+    }
+    return bytes;
+  } catch (error) {
+    throw new Error('Erro ao decodificar dados do certificado: ' + error.message);
+  }
+}

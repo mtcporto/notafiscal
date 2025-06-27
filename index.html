@@ -269,6 +269,18 @@
       <button type="button" id="btnValidar" class="btn-info" style="margin-left: 10px;">
         <i class="fas fa-check-circle"></i> Validar Tudo
       </button>
+      <button type="button" id="btnTesteModeloOficial" class="btn-success" style="margin-left: 10px;">
+        <i class="fas fa-clipboard-check"></i> Teste Modelo Oficial
+      </button>
+      <button type="button" id="btnTestarCanonicalizacao" class="btn-warning" style="margin-left: 10px;">
+        <i class="fas fa-bug"></i> Debug Canonicalização
+      </button>
+      <button type="button" id="btnTesteComparativo" class="btn-info" style="margin-left: 10px;">
+        <i class="fas fa-balance-scale"></i> Teste Comparativo
+      </button>
+      <button type="button" id="btnTesteCompleto" class="btn-primary" style="margin-left: 10px;">
+        <i class="fas fa-rocket"></i> Teste Completo
+      </button>
     </div></div>
 
   <!-- Modal de Configurações -->
@@ -509,5 +521,34 @@
       });
     }
   </script>
+
+  <!-- Script de Teste Modelo Oficial João Pessoa -->
+  <script src="teste-modelo-oficial-browser.js"></script>
+  
+  <!-- Script de Teste Comparativo -->
+  <script src="teste-fluxo-normal-vs-oficial.js"></script>
+  
+  <!-- Script de Teste Completo -->
+  <script src="teste-fluxo-completo-normal.js"></script>
+  
+  <script>
+    // Adicionar evento ao botão de teste modelo oficial
+    document.getElementById('btnTesteModeloOficial').addEventListener('click', executarTesteModeloOficial);
+    
+    // Adicionar evento ao botão de teste comparativo
+    document.getElementById('btnTesteComparativo').addEventListener('click', () => {
+      console.log('🚀 Executando teste comparativo...');
+      testarFluxoNormalVsOficial();
+    });
+    
+    // Adicionar evento ao botão de teste completo
+    document.getElementById('btnTesteCompleto').addEventListener('click', () => {
+      console.log('🚀 Executando teste completo do fluxo normal...');
+      executarTesteCompletoNormal();
+    });
+  </script>
+
+  <!-- Script de Implementação das Correções -->
+  <script src="implementar-correcoes-gerador.js"></script>
 </body>
 </html>

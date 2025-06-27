@@ -1,0 +1,76 @@
+// Modelo de XML para gerar nota fiscal por RPS via Web Service
+
+<GerarNfse>
+<GerarNfseEnvio>
+<Rps>
+<InfDeclaracaoPrestacaoServico Id="RPS123456-ASSINA ESTE ID">
+<Rps Id="">
+<IdentificacaoRps>
+<Numero>???</Numero>
+<Serie>??</Serie>
+<Tipo>1</Tipo>
+</IdentificacaoRps>
+<DataEmissao>2023-02-15</DataEmissao>
+<Status>1</Status>
+</Rps>
+<Competencia>2023-02-01</Competencia>
+<Servico>
+<Valores>
+<ValorServicos>????.??</ValorServicos>
+</Valores>
+<IssRetido>2</IssRetido>
+<ItemListaServico>??.??</ItemListaServico>
+<CodigoCnae>?????????</CodigoCnae>
+<Discriminacao>teste</Discriminacao>
+<CodigoMunicipio>???????</CodigoMunicipio>
+<ExigibilidadeISS>?</ExigibilidadeISS>
+<MunicipioIncidencia>???????</MunicipioIncidencia>
+</Servico>
+<Prestador>
+<CpfCnpj>
+<Cnpj>??????????????</Cnpj>
+</CpfCnpj>
+<InscricaoMunicipal>??????</InscricaoMunicipal>
+</Prestador>
+<Tomador>
+<IdentificacaoTomador>
+<CpfCnpj>
+<Cpf>??????????</Cpf>
+</CpfCnpj>
+</IdentificacaoTomador>
+<RazaoSocial>TOMADOR TESTE</RazaoSocial>
+<Endereco>
+<Endereco>RUA TESTE</Endereco>
+<Numero>1</Numero>
+<Bairro>CENTRO</Bairro>
+<CodigoMunicipio>???????</CodigoMunicipio>
+<Uf>??</Uf>
+<Cep>????????</Cep>
+</Endereco>
+</Tomador>
+<OptanteSimplesNacional>2</OptanteSimplesNacional>
+<IncentivoFiscal>2</IncentivoFiscal>
+</InfDeclaracaoPrestacaoServico>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+<SignedInfo>
+<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<Reference URI="#RPS123456-ASSINA ESTE ID">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<DigestValue>?????????????????????</DigestValue>
+</Reference>
+</SignedInfo>
+<SignatureValue>?????????????????????????????????????????????????</SignatureValue>
+<KeyInfo>
+<X509Data>
+<X509Certificate>???????????????????????????????????????????????</X509Certificate>
+</X509Data>
+</KeyInfo>
+</Signature>
+</Rps>
+</GerarNfseEnvio>
+</GerarNfse>
